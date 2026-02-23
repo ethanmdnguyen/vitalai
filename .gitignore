@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Environment variables — never commit secrets
+.env
+
+# macOS metadata
+.DS_Store
+
+# Build output
+frontend/dist/
+
+# Logs
+*.log
+npm-debug.log*

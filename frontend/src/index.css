@@ -1,0 +1,5 @@
+/* Global styles for VitalAI. Tailwind base, components, and utilities are injected here. */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
