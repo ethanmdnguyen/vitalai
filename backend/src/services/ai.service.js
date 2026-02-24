@@ -58,34 +58,44 @@ Set non-workout days to null. Distribute workout days based on workout_days_per_
 }
 
 async function generateWeeklyReview(profile, plan, logs) {
-  const prompt = `You are an expert personal trainer and nutritionist. Write a concise weekly progress review for this user.
+  const mealPlan = plan.meal_plan;
 
-User profile:
-- Age: ${profile.age}, Weight: ${profile.weight_kg}kg, Goal: ${profile.goal}, Diet: ${profile.diet_type}
+  const logsText = logs
+    .map((log) => {
+      const date =
+        log.log_date instanceof Date
+          ? log.log_date.toISOString().split("T")[0]
+          : String(log.log_date).split("T")[0];
+      return `  - ${date}: workout=${log.workout_completed ? "yes" : "no"}, calories=${log.calories ?? "—"}, protein=${log.protein_g ?? "—"}g, carbs=${log.carbs_g ?? "—"}g, fat=${log.fat_g ?? "—"}g, water=${log.water_ml ?? "—"}ml, sleep=${log.sleep_hours ?? "—"}h, energy=${log.energy_level ?? "—"}/5, weight=${log.weight_kg ?? "—"}kg`;
+    })
+    .join("\n");
 
-This week's plan:
-${JSON.stringify(plan, null, 2)}
+  const prompt = `You are a supportive personal trainer and nutritionist reviewing a client's week.
 
-This week's daily logs:
-${JSON.stringify(logs, null, 2)}
+Client profile: ${profile.age} years old, goal: ${profile.goal}, diet: ${profile.diet_type}
 
-Return ONLY a valid JSON object with NO extra text, markdown, or backticks:
-{
-  "summary": "string (2-3 sentence overall summary)",
-  "wins": ["string"],
-  "improvements": ["string"],
-  "nextWeekFocus": "string"
-}`;
+Their plan this week:
+- Workout days planned: ${profile.workout_days_per_week}
+- Daily calorie target: ${mealPlan?.dailyCalorieTarget ?? "not set"}
+- Macro targets: ${mealPlan?.macros?.protein_g ?? "—"}g protein, ${mealPlan?.macros?.carbs_g ?? "—"}g carbs, ${mealPlan?.macros?.fat_g ?? "—"}g fat
+
+Their daily logs this week:
+${logsText}
+
+Please provide a weekly review with exactly these 5 sections:
+1. OVERVIEW: 2 sentences summarizing how their week went overall
+2. WINS: 2 specific positive highlights from their data
+3. IMPROVE: 2 specific, kind, actionable areas to work on
+4. NEXT WEEK: 3 concrete recommendations for next week
+5. MOTIVATION: 1 encouraging closing sentence
+
+Write in a warm, coach-like tone. Reference their actual numbers specifically.`;
 
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(prompt);
-    const review = JSON.parse(extractJson(result.response.text()));
-    return review;
+    return result.response.text();
   } catch (err) {
-    if (err instanceof SyntaxError) {
-      throw new Error("Failed to parse Gemini review response as JSON. Please try again.");
-    }
     throw new Error(`AI review generation failed: ${err.message}`);
   }
 }
