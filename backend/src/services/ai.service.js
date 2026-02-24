@@ -51,9 +51,9 @@ Set non-workout days to null. Distribute workout days based on workout_days_per_
     return plan;
   } catch (err) {
     if (err instanceof SyntaxError) {
-      throw new Error("Failed to parse Gemini response as JSON. Please try again.");
+      throw new Error("AI service temporarily unavailable. Please try again.");
     }
-    throw new Error(`AI plan generation failed: ${err.message}`);
+    throw new Error("AI service temporarily unavailable. Please try again.");
   }
 }
 
@@ -96,7 +96,7 @@ Write in a warm, coach-like tone. Reference their actual numbers specifically.`;
     const result = await model.generateContent(prompt);
     return result.response.text();
   } catch (err) {
-    throw new Error(`AI review generation failed: ${err.message}`);
+    throw new Error("AI service temporarily unavailable. Please try again.");
   }
 }
 

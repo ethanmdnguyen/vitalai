@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { generatePlan, getCurrentPlan } from "../api/plans";
+import Toast, { useToast } from "../components/Toast";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const DAY_LABELS = {
@@ -15,23 +16,22 @@ export default function Plan() {
   const [plan, setPlan] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState("");
+  const { toast, showToast } = useToast();
 
   useEffect(() => {
     getCurrentPlan()
       .then((data) => setPlan(data))
-      .catch((err) => setError(err.response?.data?.error || "Failed to load plan."))
+      .catch(() => {}) // non-fatal — empty state shows
       .finally(() => setIsLoading(false));
   }, []);
 
   async function handleGenerate() {
     setIsGenerating(true);
-    setError("");
     try {
       const data = await generatePlan();
       setPlan(data);
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to generate plan. Please try again.");
+      showToast(err.response?.data?.error || "Failed to generate plan. Please try again.", "error");
     } finally {
       setIsGenerating(false);
     }
@@ -54,7 +54,7 @@ export default function Plan() {
           {isGenerating ? (
             <>
               <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Claude is creating your plan…
+              Gemini is creating your plan…
             </>
           ) : (
             plan ? "Regenerate Plan" : "Generate My Plan"
@@ -62,11 +62,7 @@ export default function Plan() {
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 text-sm">
-          {error}
-        </div>
-      )}
+      <Toast toast={toast} />
 
       {isLoading && (
         <p className="text-gray-400 text-sm">Loading…</p>
@@ -74,9 +70,8 @@ export default function Plan() {
 
       {!isLoading && !plan && !isGenerating && (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <p className="text-gray-500 mb-2 font-medium">No plan yet</p>
-          <p className="text-sm text-gray-400">
-            Click "Generate My Plan" to get a personalised workout and meal plan from Claude AI.
+          <p className="text-gray-500 mb-2 font-medium">
+            No plan yet — click Generate My Plan to get started 🚀
           </p>
         </div>
       )}
@@ -87,11 +82,11 @@ export default function Plan() {
           {/* ── Workout Plan ── */}
           <section>
             <h2 className="text-lg font-semibold text-gray-800 mb-4">Workout Plan</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+            <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 md:overflow-x-visible">
               {DAYS.map((day) => {
                 const dayPlan = workoutPlan?.[day];
                 return (
-                  <div key={day} className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col">
+                  <div key={day} className="shrink-0 w-40 md:w-auto bg-white rounded-xl border border-gray-200 p-4 flex flex-col">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
                       {DAY_LABELS[day]}
                     </p>

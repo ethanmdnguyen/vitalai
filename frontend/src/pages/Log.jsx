@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { saveLog, getTodayLog } from "../api/logs";
 import { getCurrentPlan } from "../api/plans";
+import Toast, { useToast } from "../components/Toast";
 
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
@@ -50,8 +51,7 @@ export default function Log() {
   const [plan, setPlan] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successMsg, setSuccessMsg] = useState("");
-  const [error, setError] = useState("");
+  const { toast, showToast } = useToast();
 
   const today = new Date();
   const todayFormatted = today.toLocaleDateString("en-US", {
@@ -76,8 +76,6 @@ export default function Log() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError("");
-    setSuccessMsg("");
     setIsSubmitting(true);
 
     try {
@@ -92,9 +90,9 @@ export default function Log() {
         energy_level:  form.energy_level  !== null ? Number(form.energy_level) : null,
         weight_kg:     form.weight_kg     !== "" ? Number(form.weight_kg)     : null,
       });
-      setSuccessMsg("Logged! Keep it up 💪");
+      showToast("Logged! Keep it up 💪", "success");
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to save log. Please try again.");
+      showToast(err.response?.data?.error || "Failed to save log. Please try again.", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -109,6 +107,7 @@ export default function Log() {
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">{todayFormatted}</h1>
 
+      <Toast toast={toast} />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* ── Left: Today's Targets ── */}
@@ -329,14 +328,6 @@ export default function Log() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               />
             </div>
-
-            {error && (
-              <p className="text-red-600 text-sm">{error}</p>
-            )}
-
-            {successMsg && (
-              <p className="text-green-600 text-sm font-medium">{successMsg}</p>
-            )}
 
             <button
               type="submit"

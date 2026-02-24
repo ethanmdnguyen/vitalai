@@ -17,8 +17,20 @@ const errorHandler = require("./src/middleware/errorHandler");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+function getTimestamp() {
+  return new Date().toISOString().replace("T", " ").substring(0, 19);
+}
+
 app.use(cors());
 app.use(express.json());
+
+// Request logger: [timestamp] METHOD /path → status
+app.use((req, res, next) => {
+  res.on("finish", () => {
+    console.log(`[${getTimestamp()}] ${req.method} ${req.path} → ${res.statusCode}`);
+  });
+  next();
+});
 
 // Routes
 app.use("/api/health", healthRouter);

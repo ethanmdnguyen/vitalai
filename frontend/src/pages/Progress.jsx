@@ -188,9 +188,11 @@ export default function Progress() {
         /* No reviews yet */
         !error && (
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-            <p className="text-gray-500 font-medium mb-2">No reviews yet</p>
+            <p className="text-gray-500 font-medium mb-2">
+              Log at least 3 days to unlock your weekly AI review 🧠
+            </p>
             <p className="text-sm text-gray-400 mb-4">
-              You need at least 3 days of logs to get a review.
+              Once you have 3 days of logs, hit "Get My Weekly Review" above.
             </p>
             <Link
               to="/log"

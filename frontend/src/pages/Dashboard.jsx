@@ -138,9 +138,11 @@ export default function Dashboard() {
       {/* Empty state */}
       {!hasAnyData && (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center mb-6">
-          <p className="text-gray-500 font-medium mb-2">No data yet</p>
+          <p className="text-gray-500 font-medium mb-2">
+            No data yet — start logging to see your stats 📊
+          </p>
           <p className="text-sm text-gray-400 mb-4">
-            Start logging to see your progress charts here.
+            Your charts and streak will appear here once you log your first day.
           </p>
           <Link
             to="/log"

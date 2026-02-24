@@ -1,4 +1,4 @@
-// Layout — persistent shell with a left sidebar and main content area.
+// Layout — persistent shell with a left sidebar (md+) and bottom tab bar (mobile).
 // Shown on all protected pages. Decodes the JWT to display the logged-in username.
 
 import { NavLink, useNavigate } from "react-router-dom";
@@ -34,8 +34,8 @@ export default function Layout({ children }) {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <aside className="w-56 shrink-0 bg-white border-r border-gray-200 flex flex-col">
+      {/* Sidebar — hidden on mobile, shown md+ */}
+      <aside className="hidden md:flex w-56 shrink-0 bg-white border-r border-gray-200 flex-col">
         {/* App name + username */}
         <div className="px-5 py-6 border-b border-gray-100">
           <p className="text-lg font-bold text-blue-600 mb-1">VitalAI</p>
@@ -72,10 +72,33 @@ export default function Layout({ children }) {
         </div>
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 p-8 overflow-y-auto">
+      {/* Main content — extra bottom padding on mobile for tab bar */}
+      <main className="flex-1 p-4 md:p-8 overflow-y-auto pb-20 md:pb-8">
         {children}
       </main>
+
+      {/* Bottom tab bar — visible on mobile only */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-40">
+        {NAV_LINKS.map(({ to, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              `flex-1 flex flex-col items-center justify-center py-2 text-xs font-medium transition-colors ${
+                isActive ? "text-blue-600" : "text-gray-500"
+              }`
+            }
+          >
+            {label}
+          </NavLink>
+        ))}
+        <button
+          onClick={handleLogout}
+          className="flex-1 flex flex-col items-center justify-center py-2 text-xs font-medium text-gray-500"
+        >
+          Log out
+        </button>
+      </nav>
     </div>
   );
 }

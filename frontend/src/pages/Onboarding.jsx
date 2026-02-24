@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../api/client";
+import Toast, { useToast } from "../components/Toast";
 
 const TOTAL_STEPS = 3;
 
@@ -34,8 +35,8 @@ const INITIAL_FORM = {
 export default function Onboarding() {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState(INITIAL_FORM);
-  const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast, showToast } = useToast();
   const navigate = useNavigate();
 
   function handleChange(e) {
@@ -43,18 +44,15 @@ export default function Onboarding() {
   }
 
   function handleNext() {
-    setError("");
     setCurrentStep((prev) => prev + 1);
   }
 
   function handleBack() {
-    setError("");
     setCurrentStep((prev) => prev - 1);
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError("");
     setIsSubmitting(true);
 
     try {
@@ -67,7 +65,7 @@ export default function Onboarding() {
       });
       navigate("/dashboard");
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to save profile. Please try again.");
+      showToast(err.response?.data?.error || "Failed to save profile. Please try again.", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -92,11 +90,7 @@ export default function Onboarding() {
           </div>
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6 text-sm">
-            {error}
-          </div>
-        )}
+        <Toast toast={toast} />
 
         {/* Step 1 — Your Body */}
         {currentStep === 1 && (
