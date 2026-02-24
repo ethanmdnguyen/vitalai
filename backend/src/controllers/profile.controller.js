@@ -1,4 +1,6 @@
 // Profile controller — handles get and upsert of a user's health profile.
+// v1 required fields are still enforced for backwards compatibility.
+// v2 fields (fitness_level, workout_types, dietary_restrictions, etc.) are optional.
 
 const { createOrUpdateProfile, getProfileByUserId } = require("../models/profile.model");
 
@@ -16,6 +18,7 @@ async function updateProfile(req, res) {
     });
   }
 
+  // createOrUpdateProfile handles all v1 + v2 fields; arrays are stringified by the model.
   const profile = await createOrUpdateProfile(userId, req.body);
   return res.status(200).json(profile);
 }
@@ -28,6 +31,7 @@ async function getProfile(req, res) {
     return res.status(404).json({ error: "Profile not found" });
   }
 
+  // workout_types, dietary_restrictions, secondary_goals are already parsed to arrays by the model.
   return res.status(200).json(profile);
 }
 

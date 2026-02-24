@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+  -- v1 fields (kept for backwards compatibility)
   age INT,
   weight_kg DECIMAL(5,2),
   height_cm INT,
@@ -19,6 +20,24 @@ CREATE TABLE IF NOT EXISTS profiles (
   diet_type VARCHAR(50),
   workout_days_per_week INT,
   workout_preferences TEXT,
+  -- v2 body & fitness fields
+  unit_preference VARCHAR(10) DEFAULT 'metric',
+  fitness_level VARCHAR(20),
+  body_fat_percent DECIMAL(4,1),
+  injuries TEXT,
+  -- v2 workout preferences (JSON arrays stored as text)
+  workout_types TEXT,
+  -- v2 diet fields
+  dietary_restrictions TEXT,
+  dietary_notes TEXT,
+  meal_prep_days INT DEFAULT 2,
+  -- v2 goal fields
+  primary_goal VARCHAR(100),
+  secondary_goals TEXT,
+  goal_intensity VARCHAR(50),
+  event_type VARCHAR(100),
+  event_date DATE,
+  event_name VARCHAR(255),
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -46,6 +65,8 @@ CREATE TABLE IF NOT EXISTS daily_logs (
   weight_kg DECIMAL(5,2),
   workout_completed BOOLEAN DEFAULT FALSE,
   notes TEXT,
+  meals_log TEXT,
+  workout_log TEXT,
   UNIQUE(user_id, log_date)
 );
 
@@ -54,5 +75,32 @@ CREATE TABLE IF NOT EXISTS weekly_reviews (
   user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   week_start DATE,
   review_text TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS saved_meals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  meal_type VARCHAR(50),
+  ingredients TEXT NOT NULL,
+  instructions TEXT,
+  macros TEXT,
+  prep_time_minutes INT,
+  cook_time_minutes INT,
+  servings DECIMAL(4,1) DEFAULT 1,
+  external_recipe_url VARCHAR(500),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS grocery_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  plan_id UUID REFERENCES plans(id) ON DELETE CASCADE,
+  ingredient VARCHAR(255) NOT NULL,
+  meal_name VARCHAR(255),
+  meal_type VARCHAR(50),
+  category VARCHAR(100),
+  checked BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT NOW()
 );

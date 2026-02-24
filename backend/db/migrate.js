@@ -19,16 +19,40 @@ async function migrate() {
     await client.query(schemaSql);
 
     // Ensure profiles.user_id has a unique constraint (required for upsert).
-    // CREATE UNIQUE INDEX IF NOT EXISTS is safe to run on existing databases.
     await client.query(
       "CREATE UNIQUE INDEX IF NOT EXISTS profiles_user_id_idx ON profiles(user_id)"
     );
 
-    // Add notes column to plans if it doesn't exist (safe to run on existing DBs).
-    await client.query(
-      "ALTER TABLE plans ADD COLUMN IF NOT EXISTS notes TEXT"
-    );
-    console.log("Migration complete: all tables created successfully.");
+    // v1 migrations — safe to re-run on existing databases.
+    await client.query("ALTER TABLE plans ADD COLUMN IF NOT EXISTS notes TEXT");
+
+    // v2 migrations — profiles new columns.
+    const profileAlters = [
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS unit_preference VARCHAR(10) DEFAULT 'metric'",
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS fitness_level VARCHAR(20)",
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS body_fat_percent DECIMAL(4,1)",
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS injuries TEXT",
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS workout_types TEXT",
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS dietary_restrictions TEXT",
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS dietary_notes TEXT",
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS meal_prep_days INT DEFAULT 2",
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS primary_goal VARCHAR(100)",
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS secondary_goals TEXT",
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS goal_intensity VARCHAR(50)",
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS event_type VARCHAR(100)",
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS event_date DATE",
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS event_name VARCHAR(255)",
+    ];
+
+    for (const sql of profileAlters) {
+      await client.query(sql);
+    }
+
+    // v2 migrations — daily_logs new columns.
+    await client.query("ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS meals_log TEXT");
+    await client.query("ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS workout_log TEXT");
+
+    console.log("Migration complete: all tables and columns applied successfully.");
   } catch (err) {
     console.error("Migration failed:", err.message);
     process.exit(1);
