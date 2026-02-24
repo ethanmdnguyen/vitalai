@@ -23,6 +23,11 @@ async function migrate() {
     await client.query(
       "CREATE UNIQUE INDEX IF NOT EXISTS profiles_user_id_idx ON profiles(user_id)"
     );
+
+    // Add notes column to plans if it doesn't exist (safe to run on existing DBs).
+    await client.query(
+      "ALTER TABLE plans ADD COLUMN IF NOT EXISTS notes TEXT"
+    );
     console.log("Migration complete: all tables created successfully.");
   } catch (err) {
     console.error("Migration failed:", err.message);

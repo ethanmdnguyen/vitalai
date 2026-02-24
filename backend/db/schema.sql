@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS plans (
   week_start DATE,
   workout_plan TEXT,
   meal_plan TEXT,
+  notes TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
 

@@ -8,6 +8,7 @@ require("dotenv").config();
 const healthRouter = require("./src/routes/health");
 const authRouter = require("./src/routes/auth");
 const profileRouter = require("./src/routes/profile");
+const plansRouter = require("./src/routes/plans");
 const errorHandler = require("./src/middleware/errorHandler");
 
 const app = express();
@@ -20,6 +21,7 @@ app.use(express.json());
 app.use("/api/health", healthRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/profile", profileRouter);
+app.use("/api/plans", plansRouter);
 
 // Global error handler (must be last)
 app.use(errorHandler);
