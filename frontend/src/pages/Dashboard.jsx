@@ -1,37 +1,26 @@
-// Dashboard — overview page with stat cards and placeholder charts.
-// Uses static dummy data until real log data is wired up in a later milestone.
+// Dashboard — overview page showing real aggregated health stats and charts.
+// Fetches from GET /api/dashboard on mount; shows a loading skeleton while waiting.
 
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import {
-  LineChart, Line, BarChart, Bar,
+  LineChart, Line, BarChart, Bar, ReferenceLine,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
+import { getDashboardData } from "../api/dashboard";
 
-const WEIGHT_DATA = [
-  { date: "Mon", weight: 75.2 },
-  { date: "Tue", weight: 74.8 },
-  { date: "Wed", weight: 75.5 },
-  { date: "Thu", weight: 74.9 },
-  { date: "Fri", weight: 75.1 },
-  { date: "Sat", weight: 74.7 },
-  { date: "Sun", weight: 74.5 },
-];
+// Format "2024-02-23" → "Feb 23" without timezone issues.
+function formatDate(dateStr) {
+  const [, monthStr, dayStr] = dateStr.split("-");
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${months[parseInt(monthStr, 10) - 1]} ${parseInt(dayStr, 10)}`;
+}
 
-const CALORIE_DATA = [
-  { date: "Mon", calories: 2100 },
-  { date: "Tue", calories: 1950 },
-  { date: "Wed", calories: 2200 },
-  { date: "Thu", calories: 1800 },
-  { date: "Fri", calories: 2050 },
-  { date: "Sat", calories: 2300 },
-  { date: "Sun", calories: 1900 },
-];
-
-const STAT_CARDS = [
-  { label: "Workouts This Week", value: "0" },
-  { label: "Avg Daily Calories",  value: "--" },
-  { label: "Current Weight",      value: "--" },
-  { label: "Day Streak",          value: "0"  },
-];
+function SkeletonBox({ className = "" }) {
+  return (
+    <div className={`bg-gray-200 rounded-xl animate-pulse ${className}`} />
+  );
+}
 
 function StatCard({ label, value }) {
   return (
@@ -52,9 +41,88 @@ function ChartCard({ title, children }) {
 }
 
 export default function Dashboard() {
-  const workoutsCompleted = 0;
-  const workoutsTotal = 0;
-  const workoutPercent = workoutsTotal > 0 ? (workoutsCompleted / workoutsTotal) * 100 : 0;
+  const [data, setData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    getDashboardData()
+      .then(setData)
+      .catch(() => setData(null))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  // ── Loading skeleton ──────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div>
+        <SkeletonBox className="h-8 w-40 mb-6" />
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+          {[...Array(4)].map((_, i) => <SkeletonBox key={i} className="h-24" />)}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {[...Array(3)].map((_, i) => <SkeletonBox key={i} className="h-64" />)}
+        </div>
+      </div>
+    );
+  }
+
+  const {
+    workoutsThisWeek = 0,
+    avgCaloriesThisWeek = null,
+    currentWeight = null,
+    streak = 0,
+    calorieTarget = null,
+    weightHistory = [],
+    calorieHistory = [],
+    workoutHistory = [],
+    weeklyPlanTotal = 0,
+  } = data ?? {};
+
+  const hasAnyData =
+    weightHistory.length > 0 || calorieHistory.length > 0 || workoutsThisWeek > 0;
+
+  const workoutPercent =
+    weeklyPlanTotal > 0 ? Math.min((workoutsThisWeek / weeklyPlanTotal) * 100, 100) : 0;
+
+  // ── Format stat card values ───────────────────────────────────────────────
+  const statCards = [
+    {
+      label: "Workouts This Week",
+      value: weeklyPlanTotal > 0
+        ? `${workoutsThisWeek} of ${weeklyPlanTotal} planned`
+        : `${workoutsThisWeek}`,
+    },
+    {
+      label: "Avg Daily Calories",
+      value: avgCaloriesThisWeek != null
+        ? `${avgCaloriesThisWeek.toLocaleString()} kcal`
+        : "--",
+    },
+    {
+      label: "Current Weight",
+      value: currentWeight != null ? `${currentWeight} kg` : "--",
+    },
+    {
+      label: "Day Streak",
+      value: streak > 0 ? `${streak} day${streak !== 1 ? "s" : ""} 🔥` : "0 days",
+    },
+  ];
+
+  // ── Prepare chart data with formatted labels ──────────────────────────────
+  const weightChartData = weightHistory.map((d) => ({
+    date: formatDate(d.date),
+    weight_kg: d.weight_kg,
+  }));
+
+  const calorieChartData = calorieHistory.map((d) => ({
+    date: formatDate(d.date),
+    calories: d.calories,
+  }));
+
+  const weightValues = weightHistory.map((d) => d.weight_kg);
+  const weightDomain = weightValues.length > 0
+    ? [Math.floor(Math.min(...weightValues)) - 1, Math.ceil(Math.max(...weightValues)) + 1]
+    : ["auto", "auto"];
 
   return (
     <div>
@@ -62,64 +130,110 @@ export default function Dashboard() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
-        {STAT_CARDS.map((card) => (
+        {statCards.map((card) => (
           <StatCard key={card.label} {...card} />
         ))}
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Empty state */}
+      {!hasAnyData && (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center mb-6">
+          <p className="text-gray-500 font-medium mb-2">No data yet</p>
+          <p className="text-sm text-gray-400 mb-4">
+            Start logging to see your progress charts here.
+          </p>
+          <Link
+            to="/log"
+            className="inline-block bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
+          >
+            Log Today →
+          </Link>
+        </div>
+      )}
 
-        {/* Weight Trend */}
-        <ChartCard title="Weight Trend (kg)">
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={WEIGHT_DATA}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-              <YAxis domain={[74, 76]} tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Line
-                type="monotone"
-                dataKey="weight"
-                stroke="#2563eb"
-                strokeWidth={2}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
+      {/* Charts (only render when there's something to show) */}
+      {hasAnyData && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+          {/* Weight Trend */}
+          <ChartCard title="Weight Trend — past 14 days (kg)">
+            {weightChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={weightChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                  <YAxis domain={weightDomain} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="weight_kg"
+                    name="Weight (kg)"
+                    stroke="#2563eb"
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                    activeDot={{ r: 5 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-8">
+                Log your body weight to see this chart.
+              </p>
+            )}
+          </ChartCard>
+
+          {/* Daily Calories */}
+          <ChartCard title="Daily Calories — past 7 days">
+            {calorieChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={calorieChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="calories" name="Calories" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                  {calorieTarget && (
+                    <ReferenceLine
+                      y={calorieTarget}
+                      stroke="#ef4444"
+                      strokeDasharray="4 4"
+                      label={{
+                        value: `Target: ${calorieTarget}`,
+                        position: "insideTopRight",
+                        fontSize: 11,
+                        fill: "#ef4444",
+                      }}
+                    />
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-8">
+                Log your calories to see this chart.
+              </p>
+            )}
+          </ChartCard>
+
+          {/* Workout Completion */}
+          <ChartCard title="Workout Completion This Week">
+            <p className="text-sm text-gray-500 mb-3">
+              {workoutsThisWeek} of {weeklyPlanTotal} workouts done this week
+            </p>
+            <div className="w-full bg-gray-100 rounded-full h-3">
+              <div
+                className="bg-blue-600 h-3 rounded-full transition-all"
+                style={{ width: `${workoutPercent}%` }}
               />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartCard>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              {weeklyPlanTotal === 0
+                ? "Generate a plan to set your weekly target."
+                : `${Math.round(workoutPercent)}% complete`}
+            </p>
+          </ChartCard>
 
-        {/* Daily Calories */}
-        <ChartCard title="Daily Calories">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={CALORIE_DATA}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Bar dataKey="calories" fill="#2563eb" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Workout Completion */}
-        <ChartCard title="Workout Completion This Week">
-          <p className="text-sm text-gray-500 mb-3">
-            {workoutsCompleted} of {workoutsTotal} workouts done this week
-          </p>
-          <div className="w-full bg-gray-100 rounded-full h-3">
-            <div
-              className="bg-blue-600 h-3 rounded-full transition-all"
-              style={{ width: `${workoutPercent}%` }}
-            />
-          </div>
-          <p className="text-xs text-gray-400 mt-2">
-            {workoutsTotal === 0 ? "Log your first workout to get started." : `${Math.round(workoutPercent)}% complete`}
-          </p>
-        </ChartCard>
-
-      </div>
+        </div>
+      )}
     </div>
   );
 }
