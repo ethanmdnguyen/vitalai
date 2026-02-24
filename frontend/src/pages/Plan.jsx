@@ -1,7 +1,8 @@
 // Plan page — displays the AI-generated weekly workout and meal plan.
 // Fetches the existing plan on load; allows regeneration via a button.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { generatePlan, getCurrentPlan } from "../api/plans";
 import Toast, { useToast } from "../components/Toast";
 
@@ -17,6 +18,9 @@ export default function Plan() {
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const { toast, showToast } = useToast();
+  const location = useLocation();
+  // Capture auto-generate flag once on mount so it survives re-renders.
+  const shouldAutoGenerate = useRef(location.state?.autoGenerate === true);
 
   useEffect(() => {
     getCurrentPlan()
@@ -24,6 +28,16 @@ export default function Plan() {
       .catch(() => {}) // non-fatal — empty state shows
       .finally(() => setIsLoading(false));
   }, []);
+
+  // When the initial load finishes, auto-generate if redirected from onboarding.
+  useEffect(() => {
+    if (!isLoading && shouldAutoGenerate.current) {
+      shouldAutoGenerate.current = false;
+      window.history.replaceState({}, document.title); // prevent re-trigger on refresh
+      handleGenerate();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading]);
 
   async function handleGenerate() {
     setIsGenerating(true);
