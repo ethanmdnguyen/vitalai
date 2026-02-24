@@ -17,6 +17,12 @@ async function migrate() {
     const schemaSql = fs.readFileSync(schemaPath, "utf8");
 
     await client.query(schemaSql);
+
+    // Ensure profiles.user_id has a unique constraint (required for upsert).
+    // CREATE UNIQUE INDEX IF NOT EXISTS is safe to run on existing databases.
+    await client.query(
+      "CREATE UNIQUE INDEX IF NOT EXISTS profiles_user_id_idx ON profiles(user_id)"
+    );
     console.log("Migration complete: all tables created successfully.");
   } catch (err) {
     console.error("Migration failed:", err.message);
