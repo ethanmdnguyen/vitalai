@@ -11,8 +11,8 @@ const SALT_ROUNDS = 10;
 // Always set JWT_SECRET to a strong value in production.
 const JWT_SECRET = process.env.JWT_SECRET || "dev_jwt_secret_change_in_production";
 
-function signToken(userId) {
-  return jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: "7d" });
+function signToken(userId, username) {
+  return jwt.sign({ id: userId, username }, JWT_SECRET, { expiresIn: "7d" });
 }
 
 async function register(req, res) {
@@ -29,7 +29,7 @@ async function register(req, res) {
   try {
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     const newUser = await createUser(username, email, passwordHash);
-    const token = signToken(newUser.id);
+    const token = signToken(newUser.id, newUser.username);
 
     return res.status(201).json({
       token,
@@ -61,7 +61,7 @@ async function login(req, res) {
     return res.status(401).json({ error: "Invalid email or password." });
   }
 
-  const token = signToken(user.id);
+  const token = signToken(user.id, user.username);
 
   return res.status(200).json({
     token,
