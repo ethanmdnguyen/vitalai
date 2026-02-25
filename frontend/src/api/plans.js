@@ -11,3 +11,13 @@ export async function getCurrentPlan() {
   const response = await apiClient.get("/plans/current");
   return response.data;
 }
+
+export async function patchWorkoutPlan(workoutPlan) {
+  const response = await apiClient.patch("/plans/current", { workoutPlan });
+  return response.data;
+}
+
+export async function swapExercise(data) {
+  const response = await apiClient.post("/plans/swap-exercise", data);
+  return response.data;
+}

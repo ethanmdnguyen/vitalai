@@ -100,4 +100,37 @@ Write in a warm, coach-like tone. Reference their actual numbers specifically.`;
   }
 }
 
-module.exports = { generateWeeklyPlan, generateWeeklyReview };
+async function suggestExerciseAlternatives({ exerciseName, primaryMuscle, userWeightKg, customRequest }) {
+  const focus = customRequest
+    ? `The user specifically requests: ${customRequest}`
+    : exerciseName
+    ? `as a replacement for "${exerciseName}" targeting ${primaryMuscle || "the same muscle groups"}`
+    : `targeting ${primaryMuscle || "general fitness"}`;
+
+  const weightNote = userWeightKg ? ` The user weighs ${userWeightKg}kg.` : "";
+
+  const prompt = `You are an expert personal trainer. Suggest 3 distinct exercise alternatives ${focus}.${weightNote}
+
+Return ONLY a valid JSON array with exactly 3 objects. No markdown, no extra text, no backticks:
+[
+  {
+    "name": "string",
+    "sets": 3,
+    "reps": "string",
+    "notes": "string",
+    "primary_muscles": ["string"],
+    "secondary_muscles": ["string"]
+  }
+]`;
+
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent(prompt);
+    const parsed = JSON.parse(extractJson(result.response.text()));
+    return Array.isArray(parsed) ? parsed.slice(0, 3) : [];
+  } catch {
+    throw new Error("AI service temporarily unavailable. Please try again.");
+  }
+}
+
+module.exports = { generateWeeklyPlan, generateWeeklyReview, suggestExerciseAlternatives };

@@ -39,4 +39,24 @@ async function getCurrentPlan(userId) {
   };
 }
 
-module.exports = { savePlan, getCurrentPlan };
+async function updatePlanWorkout(userId, workoutPlan) {
+  const result = await pool.query(
+    `UPDATE plans
+     SET workout_plan = $1
+     WHERE id = (
+       SELECT id FROM plans WHERE user_id = $2 ORDER BY created_at DESC LIMIT 1
+     )
+     RETURNING *`,
+    [JSON.stringify(workoutPlan), userId]
+  );
+
+  if (!result.rows[0]) return null;
+  const row = result.rows[0];
+  return {
+    ...row,
+    workout_plan: workoutPlan,
+    meal_plan: typeof row.meal_plan === "string" ? JSON.parse(row.meal_plan) : row.meal_plan,
+  };
+}
+
+module.exports = { savePlan, getCurrentPlan, updatePlanWorkout };

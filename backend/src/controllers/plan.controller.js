@@ -1,7 +1,7 @@
 // Plan controller — generates an AI plan for the user and retrieves the current one.
 
-const { generateWeeklyPlan } = require("../services/ai.service");
-const { savePlan, getCurrentPlan } = require("../models/plan.model");
+const { generateWeeklyPlan, suggestExerciseAlternatives } = require("../services/ai.service");
+const { savePlan, getCurrentPlan, updatePlanWorkout } = require("../models/plan.model");
 const { getProfileByUserId } = require("../models/profile.model");
 
 // Returns the ISO date string (YYYY-MM-DD) for Monday of the current week.
@@ -42,4 +42,35 @@ async function getPlan(req, res) {
   return res.status(200).json(plan);
 }
 
-module.exports = { generatePlan, getPlan };
+async function patchPlan(req, res) {
+  const { workoutPlan } = req.body;
+  if (!workoutPlan) {
+    return res.status(400).json({ error: "workoutPlan is required." });
+  }
+
+  const updated = await updatePlanWorkout(req.user.id, workoutPlan);
+  if (!updated) {
+    return res.status(404).json({ error: "No plan found to update." });
+  }
+
+  return res.status(200).json(updated);
+}
+
+async function swapExerciseHandler(req, res) {
+  const { exerciseName, primaryMuscle, userWeightKg, customRequest } = req.body;
+
+  // Fall back to the user's profile weight if not supplied by the client.
+  const profile = await getProfileByUserId(req.user.id);
+  const weightKg = userWeightKg || profile?.weight_kg || 70;
+
+  const alternatives = await suggestExerciseAlternatives({
+    exerciseName,
+    primaryMuscle,
+    userWeightKg: weightKg,
+    customRequest,
+  });
+
+  return res.status(200).json({ alternatives });
+}
+
+module.exports = { generatePlan, getPlan, patchPlan, swapExerciseHandler };
