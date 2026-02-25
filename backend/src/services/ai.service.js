@@ -163,4 +163,35 @@ Return ONLY a valid JSON array with exactly 3 objects. No markdown, no extra tex
   }
 }
 
-module.exports = { generateWeeklyPlan, generateWeeklyReview, suggestExerciseAlternatives, suggestMealAlternatives };
+async function categorizeGroceries(ingredients) {
+  const ingredientList = ingredients
+    .map((i) => `- ${i.ingredient} (from ${i.meal_name}, ${i.meal_type})`)
+    .join("\n");
+
+  const prompt = `You are a grocery expert. Categorize these ingredients into groups: Produce, Proteins, Dairy & Eggs, Grains & Carbs, Pantry, Other.
+
+Return ONLY a valid JSON array. No markdown, no extra text, no backticks. Each object must have exactly these fields:
+[
+  { "ingredient": "string", "meal_name": "string", "meal_type": "string", "category": "string" }
+]
+
+Ingredients to categorize:
+${ingredientList}`;
+
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent(prompt);
+    const parsed = JSON.parse(extractJson(result.response.text()));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    throw new Error("AI service temporarily unavailable. Please try again.");
+  }
+}
+
+module.exports = {
+  generateWeeklyPlan,
+  generateWeeklyReview,
+  suggestExerciseAlternatives,
+  suggestMealAlternatives,
+  categorizeGroceries,
+};

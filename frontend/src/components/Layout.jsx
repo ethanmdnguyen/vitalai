@@ -17,10 +17,11 @@ function getUsernameFromToken() {
 }
 
 const NAV_LINKS = [
-  { to: "/dashboard", label: "Dashboard" },
-  { to: "/plan",      label: "My Plan"   },
-  { to: "/log",       label: "Log Today" },
-  { to: "/progress",  label: "Progress"  },
+  { to: "/dashboard", label: "Dashboard"   },
+  { to: "/plan",      label: "My Plan"     },
+  { to: "/grocery",   label: "🛒 Grocery"  },
+  { to: "/log",       label: "Log Today"   },
+  { to: "/progress",  label: "Progress"    },
   { to: "/settings",  label: "⚙️ Settings" },
 ];
 

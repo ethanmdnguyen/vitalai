@@ -12,6 +12,7 @@ import Plan from "./pages/Plan.jsx";
 import Log from "./pages/Log.jsx";
 import Progress from "./pages/Progress.jsx";
 import Settings from "./pages/Settings.jsx";
+import Grocery from "./pages/Grocery.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import Layout from "./components/Layout.jsx";
 
@@ -34,6 +35,7 @@ export default function App() {
 
         <Route path="/dashboard" element={<ProtectedLayout><Dashboard /></ProtectedLayout>} />
         <Route path="/plan"      element={<ProtectedLayout><Plan /></ProtectedLayout>} />
+        <Route path="/grocery"   element={<ProtectedLayout><Grocery /></ProtectedLayout>} />
         <Route path="/log"       element={<ProtectedLayout><Log /></ProtectedLayout>} />
         <Route path="/progress"  element={<ProtectedLayout><Progress /></ProtectedLayout>} />
         <Route path="/settings"  element={<ProtectedLayout><Settings /></ProtectedLayout>} />
