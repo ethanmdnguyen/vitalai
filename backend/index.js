@@ -12,6 +12,7 @@ const plansRouter = require("./src/routes/plans");
 const logsRouter = require("./src/routes/logs");
 const dashboardRouter = require("./src/routes/dashboard");
 const reviewsRouter = require("./src/routes/reviews");
+const settingsRouter = require("./src/routes/settings");
 const errorHandler = require("./src/middleware/errorHandler");
 
 const app = express();
@@ -40,6 +41,7 @@ app.use("/api/plans", plansRouter);
 app.use("/api/logs", logsRouter);
 app.use("/api/dashboard", dashboardRouter);
 app.use("/api/reviews", reviewsRouter);
+app.use("/api/user", settingsRouter);
 
 // Global error handler (must be last)
 app.use(errorHandler);

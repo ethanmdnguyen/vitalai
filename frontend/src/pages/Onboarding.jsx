@@ -278,6 +278,14 @@ export default function Onboarding() {
 
   async function handleSubmit() {
     if (!validateStep()) return;
+
+    // Guard against a missing session — this happens if the user navigates
+    // directly to /onboarding without registering, or if localStorage was cleared.
+    if (!localStorage.getItem("token")) {
+      showToast("Session expired. Please log in or register again.", "error");
+      return;
+    }
+
     setIsSubmitting(true);
 
     const imperial = formData.unitPreference === "imperial";

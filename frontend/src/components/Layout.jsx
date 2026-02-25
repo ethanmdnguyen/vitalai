@@ -21,6 +21,7 @@ const NAV_LINKS = [
   { to: "/plan",      label: "My Plan"   },
   { to: "/log",       label: "Log Today" },
   { to: "/progress",  label: "Progress"  },
+  { to: "/settings",  label: "⚙️ Settings" },
 ];
 
 export default function Layout({ children }) {

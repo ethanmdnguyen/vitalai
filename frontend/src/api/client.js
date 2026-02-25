@@ -10,7 +10,8 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    // Use .set() — required for Axios v1.x AxiosHeaders internal serialization.
+    config.headers.set("Authorization", `Bearer ${token}`);
   }
   return config;
 });
