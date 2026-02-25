@@ -5,11 +5,12 @@
 const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
-const { generatePlan, getPlan, patchPlan, swapExerciseHandler } = require("../controllers/plan.controller");
+const { generatePlan, getPlan, patchPlan, swapExerciseHandler, swapMealHandler } = require("../controllers/plan.controller");
 
 router.post("/generate", authMiddleware, generatePlan);
 router.get("/current", authMiddleware, getPlan);
 router.patch("/current", authMiddleware, patchPlan);
 router.post("/swap-exercise", authMiddleware, swapExerciseHandler);
+router.post("/swap-meal", authMiddleware, swapMealHandler);
 
 module.exports = router;

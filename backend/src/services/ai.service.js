@@ -133,4 +133,34 @@ Return ONLY a valid JSON array with exactly 3 objects. No markdown, no extra tex
   }
 }
 
-module.exports = { generateWeeklyPlan, generateWeeklyReview, suggestExerciseAlternatives };
+async function suggestMealAlternatives({ mealType, dietType, calorieTarget, restrictions, customRequest }) {
+  const focus = customRequest
+    ? `The user specifically requests: ${customRequest}`
+    : `as a replacement${mealType ? ` for a ${mealType}` : ""} for someone following a ${dietType || "standard"} diet`;
+
+  const calNote = calorieTarget ? ` Target calories: around ${calorieTarget} kcal.` : "";
+  const restrictNote = restrictions?.length ? ` Dietary restrictions: ${restrictions.join(", ")}.` : "";
+
+  const prompt = `You are an expert nutritionist. Suggest 3 distinct meal alternatives ${focus}.${calNote}${restrictNote}
+
+Return ONLY a valid JSON array with exactly 3 objects. No markdown, no extra text, no backticks:
+[
+  {
+    "name": "string",
+    "calories": 0,
+    "ingredients": ["string"],
+    "macros": { "protein_g": 0, "carbs_g": 0, "fat_g": 0 }
+  }
+]`;
+
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent(prompt);
+    const parsed = JSON.parse(extractJson(result.response.text()));
+    return Array.isArray(parsed) ? parsed.slice(0, 3) : [];
+  } catch {
+    throw new Error("AI service temporarily unavailable. Please try again.");
+  }
+}
+
+module.exports = { generateWeeklyPlan, generateWeeklyReview, suggestExerciseAlternatives, suggestMealAlternatives };

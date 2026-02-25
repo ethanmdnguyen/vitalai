@@ -21,3 +21,13 @@ export async function swapExercise(data) {
   const response = await apiClient.post("/plans/swap-exercise", data);
   return response.data;
 }
+
+export async function swapMeal(data) {
+  const response = await apiClient.post("/plans/swap-meal", data);
+  return response.data;
+}
+
+export async function patchMealPlan(mealPlan) {
+  const response = await apiClient.patch("/plans/current", { mealPlan });
+  return response.data;
+}

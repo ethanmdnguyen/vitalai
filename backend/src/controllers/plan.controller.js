@@ -1,7 +1,7 @@
 // Plan controller — generates an AI plan for the user and retrieves the current one.
 
-const { generateWeeklyPlan, suggestExerciseAlternatives } = require("../services/ai.service");
-const { savePlan, getCurrentPlan, updatePlanWorkout } = require("../models/plan.model");
+const { generateWeeklyPlan, suggestExerciseAlternatives, suggestMealAlternatives } = require("../services/ai.service");
+const { savePlan, getCurrentPlan, updatePlanWorkout, updatePlanMeal } = require("../models/plan.model");
 const { getProfileByUserId } = require("../models/profile.model");
 
 // Returns the ISO date string (YYYY-MM-DD) for Monday of the current week.
@@ -43,17 +43,37 @@ async function getPlan(req, res) {
 }
 
 async function patchPlan(req, res) {
-  const { workoutPlan } = req.body;
-  if (!workoutPlan) {
-    return res.status(400).json({ error: "workoutPlan is required." });
+  const { workoutPlan, mealPlan } = req.body;
+  if (!workoutPlan && !mealPlan) {
+    return res.status(400).json({ error: "workoutPlan or mealPlan is required." });
   }
 
-  const updated = await updatePlanWorkout(req.user.id, workoutPlan);
+  const updated = workoutPlan
+    ? await updatePlanWorkout(req.user.id, workoutPlan)
+    : await updatePlanMeal(req.user.id, mealPlan);
+
   if (!updated) {
     return res.status(404).json({ error: "No plan found to update." });
   }
 
   return res.status(200).json(updated);
+}
+
+async function swapMealHandler(req, res) {
+  const { mealType, dietType, calorieTarget, restrictions, customRequest } = req.body;
+
+  const profile = await getProfileByUserId(req.user.id);
+  const effectiveDietType = dietType || profile?.diet_type || "standard";
+
+  const alternatives = await suggestMealAlternatives({
+    mealType,
+    dietType: effectiveDietType,
+    calorieTarget,
+    restrictions,
+    customRequest,
+  });
+
+  return res.status(200).json({ alternatives });
 }
 
 async function swapExerciseHandler(req, res) {
@@ -73,4 +93,4 @@ async function swapExerciseHandler(req, res) {
   return res.status(200).json({ alternatives });
 }
 
-module.exports = { generatePlan, getPlan, patchPlan, swapExerciseHandler };
+module.exports = { generatePlan, getPlan, patchPlan, swapExerciseHandler, swapMealHandler };
