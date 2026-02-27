@@ -2,8 +2,8 @@
 
 import apiClient from "./client";
 
-export async function generatePlan() {
-  const response = await apiClient.post("/plans/generate");
+export async function generatePlan(feedback = null) {
+  const response = await apiClient.post("/plans/generate", feedback ? { feedback } : {});
   return response.data;
 }
 

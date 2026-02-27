@@ -14,7 +14,7 @@ function extractJson(raw) {
   return text;
 }
 
-async function generateWeeklyPlan(profile) {
+async function generateWeeklyPlan(profile, feedback = null) {
   // Build a rich goal summary from v2 fields, falling back to legacy `goal` field.
   const goalParts = [];
   if (profile.primary_goal || profile.goal) {
@@ -81,6 +81,15 @@ Return ONLY a valid JSON object with NO extra text, markdown, or backticks. Use 
   "notes": "string"
 }
 Set non-workout days to null. Distribute workout days based on workout_days_per_week.`;
+
+  // Append user feedback on previous plan if provided.
+  if (feedback) {
+    const parts = [];
+    if (feedback.dislikedFeedback) parts.push(`What the user didn't like: ${feedback.dislikedFeedback}`);
+    if (feedback.specificChanges)  parts.push(`Specific changes requested: ${feedback.specificChanges}`);
+    if (feedback.keepStructure != null) parts.push(`Keep same workout days structure: ${feedback.keepStructure ? "yes" : "no"}`);
+    if (parts.length) prompt += `\n\nUser feedback on previous plan:\n${parts.join("\n")}`;
+  }
 
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });

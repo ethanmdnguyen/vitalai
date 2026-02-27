@@ -1,6 +1,6 @@
 // Plan page — interactive AI workout + meal plan.
-// Workout: drag-and-drop days, inline editing, exercise swap/add via Gemini, calorie estimates.
-// Meal: swap meal via Gemini, save to My Meals, add custom meal, react-markdown coaching notes.
+// v3: simplified exercise cards, double-click detail modal, hover muscle highlights,
+//     per-exercise DnD reordering, editable day titles, regenerate-with-feedback modal.
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "react-router-dom";
@@ -17,13 +17,97 @@ import Toast, { useToast } from "../components/Toast";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const DAYS  = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const DAY_LABELS = {
   monday: "Mon", tuesday: "Tue", wednesday: "Wed", thursday: "Thu",
   friday: "Fri", saturday: "Sat", sunday: "Sun",
 };
 const MEALS = ["breakfast", "lunch", "dinner", "snack"];
-const MET = { hiit: 10, running: 9, swimming: 8, cycling: 7, weightlifting: 5, yoga: 3, pilates: 3 };
+const MET   = { hiit: 10, running: 9, swimming: 8, cycling: 7, weightlifting: 5, yoga: 3, pilates: 3 };
+
+// Keyword → muscle groups (used when AI doesn't supply primary_muscles).
+const MUSCLE_LOOKUP = {
+  "bench press":    ["Chest", "Triceps"],
+  "push-up":        ["Chest", "Triceps"],
+  "push up":        ["Chest", "Triceps"],
+  "pushup":         ["Chest", "Triceps"],
+  "chest fly":      ["Chest"],
+  "dumbbell fly":   ["Chest"],
+  "cable fly":      ["Chest"],
+  "cable crossover":["Chest"],
+  "incline press":  ["Chest", "Shoulders"],
+  "decline press":  ["Chest"],
+  "dip":            ["Chest", "Triceps"],
+  "pull-up":        ["Back", "Biceps"],
+  "pull up":        ["Back", "Biceps"],
+  "pullup":         ["Back", "Biceps"],
+  "chin-up":        ["Back", "Biceps"],
+  "chin up":        ["Back", "Biceps"],
+  "row":            ["Back", "Biceps"],
+  "deadlift":       ["Back", "Glutes", "Hamstrings"],
+  "lat pulldown":   ["Back", "Biceps"],
+  "face pull":      ["Shoulders", "Back"],
+  "hyperextension": ["Back", "Glutes"],
+  "shoulder press": ["Shoulders", "Triceps"],
+  "overhead press": ["Shoulders", "Triceps"],
+  "ohp":            ["Shoulders", "Triceps"],
+  "lateral raise":  ["Shoulders"],
+  "front raise":    ["Shoulders"],
+  "upright row":    ["Shoulders", "Biceps"],
+  "arnold":         ["Shoulders", "Triceps"],
+  "bicep curl":     ["Biceps"],
+  "biceps curl":    ["Biceps"],
+  "hammer curl":    ["Biceps"],
+  "curl":           ["Biceps"],
+  "tricep":         ["Triceps"],
+  "skull crusher":  ["Triceps"],
+  "kickback":       ["Triceps"],
+  "squat":          ["Quads", "Glutes"],
+  "lunge":          ["Quads", "Glutes"],
+  "leg press":      ["Quads", "Glutes"],
+  "leg extension":  ["Quads"],
+  "leg curl":       ["Hamstrings"],
+  "romanian deadlift": ["Hamstrings", "Glutes"],
+  "rdl":            ["Hamstrings", "Glutes"],
+  "glute bridge":   ["Glutes"],
+  "hip thrust":     ["Glutes"],
+  "calf raise":     ["Calves"],
+  "step-up":        ["Quads", "Glutes"],
+  "step up":        ["Quads", "Glutes"],
+  "box jump":       ["Quads", "Glutes"],
+  "plank":          ["Core"],
+  "crunch":         ["Core"],
+  "sit-up":         ["Core"],
+  "sit up":         ["Core"],
+  "russian twist":  ["Core"],
+  "leg raise":      ["Core"],
+  "bicycle":        ["Core"],
+  "mountain climber":["Core", "Cardio"],
+  "burpee":         ["Full Body"],
+  "jumping jack":   ["Cardio"],
+  "jump rope":      ["Cardio"],
+  "running":        ["Cardio"],
+  "cycling":        ["Cardio"],
+  "swim":           ["Full Body"],
+  "clean":          ["Full Body"],
+  "snatch":         ["Full Body"],
+  "thruster":       ["Full Body"],
+};
+
+const MUSCLE_COLORS = {
+  "Chest":       "bg-rose-100 text-rose-700",
+  "Back":        "bg-indigo-100 text-indigo-700",
+  "Shoulders":   "bg-purple-100 text-purple-700",
+  "Biceps":      "bg-blue-100 text-blue-700",
+  "Triceps":     "bg-cyan-100 text-cyan-700",
+  "Core":        "bg-yellow-100 text-yellow-700",
+  "Quads":       "bg-emerald-100 text-emerald-700",
+  "Hamstrings":  "bg-green-100 text-green-700",
+  "Glutes":      "bg-orange-100 text-orange-700",
+  "Calves":      "bg-lime-100 text-lime-700",
+  "Full Body":   "bg-gray-200 text-gray-700",
+  "Cardio":      "bg-pink-100 text-pink-700",
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -32,14 +116,46 @@ function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+function getMuscleColor(muscle) {
+  return MUSCLE_COLORS[muscle] || "bg-gray-100 text-gray-600";
+}
+
+// Returns { primary: string[], secondary: string[] } for an exercise.
+// Uses AI-supplied arrays if present, otherwise derives from name lookup.
+function getMusclesForExercise(ex) {
+  if (ex.primary_muscles?.length) {
+    return { primary: ex.primary_muscles, secondary: ex.secondary_muscles || [] };
+  }
+  const name = (ex.name || "").toLowerCase();
+  for (const [key, muscles] of Object.entries(MUSCLE_LOOKUP)) {
+    if (name.includes(key)) {
+      return { primary: muscles.slice(0, 2), secondary: muscles.slice(2) };
+    }
+  }
+  return { primary: [], secondary: [] };
+}
+
+function getMuscleBreakdown(wp) {
+  const counts = {};
+  Object.values(wp || {}).forEach((day) => {
+    if (!day) return;
+    (day.exercises || []).forEach((ex) => {
+      getMusclesForExercise(ex).primary.forEach((m) => {
+        counts[m] = (counts[m] || 0) + 1;
+      });
+    });
+  });
+  return counts;
+}
+
 function getMet(focus = "") {
   const f = focus.toLowerCase();
   if (f.includes("hiit") || f.includes("interval")) return MET.hiit;
-  if (f.includes("run") || f.includes("cardio")) return MET.running;
-  if (f.includes("swim")) return MET.swimming;
-  if (f.includes("cycl") || f.includes("bike")) return MET.cycling;
-  if (f.includes("yoga")) return MET.yoga;
-  if (f.includes("pilates")) return MET.pilates;
+  if (f.includes("run") || f.includes("cardio"))    return MET.running;
+  if (f.includes("swim"))                           return MET.swimming;
+  if (f.includes("cycl") || f.includes("bike"))     return MET.cycling;
+  if (f.includes("yoga"))                           return MET.yoga;
+  if (f.includes("pilates"))                        return MET.pilates;
   return MET.weightlifting;
 }
 
@@ -48,162 +164,361 @@ function estCalories(focus, durationMin, weightKg) {
   return Math.round(getMet(focus) * weightKg * (durationMin / 60));
 }
 
-function getMuscleBreakdown(wp) {
-  const counts = {};
-  Object.values(wp || {}).forEach((day) => {
-    if (!day) return;
-    (day.exercises || []).forEach((ex) => {
-      const muscles = Array.isArray(ex.primary_muscles)
-        ? ex.primary_muscles
-        : ex.primary_muscles
-        ? [ex.primary_muscles]
-        : [];
-      muscles.forEach((m) => {
-        const key = m.toLowerCase().trim();
-        counts[key] = (counts[key] || 0) + 1;
-      });
-    });
-  });
-  return counts;
+// Rough per-exercise calorie estimate: sets × bodyweight factor.
+function estExerciseCalories(sets, weightKg = 70) {
+  if (!sets) return null;
+  return Math.round((sets || 3) * (weightKg || 70) * 0.025);
 }
 
-// ── EditableCell ──────────────────────────────────────────────────────────────
+function getDayTitle(day, dayPlan) {
+  if (dayPlan?.title) return dayPlan.title;
+  return `${capitalize(day)} — ${dayPlan?.focus || "Workout"}`;
+}
 
-function EditableCell({ value, onSave, type = "text", placeholder, className = "" }) {
+// ── DayTitleEditor ────────────────────────────────────────────────────────────
+
+function DayTitleEditor({ day, dayPlan, onSave }) {
+  const defaultTitle = getDayTitle(day, dayPlan);
   const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState(String(value ?? ""));
+  const [val, setVal]         = useState(defaultTitle);
 
-  useEffect(() => { setVal(String(value ?? "")); }, [value]);
+  useEffect(() => { setVal(getDayTitle(day, dayPlan)); }, [dayPlan?.title, dayPlan?.focus]);
 
   function commit() {
     setEditing(false);
-    onSave(val);
+    const trimmed = val.trim() || defaultTitle;
+    if (trimmed !== getDayTitle(day, dayPlan)) onSave(trimmed);
   }
 
   if (editing) {
     return (
       <input
         autoFocus
-        type={type}
         value={val}
         onChange={(e) => setVal(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
-          if (e.key === "Enter") commit();
-          if (e.key === "Escape") { setEditing(false); setVal(String(value ?? "")); }
+          if (e.key === "Enter")  commit();
+          if (e.key === "Escape") { setEditing(false); setVal(getDayTitle(day, dayPlan)); }
         }}
-        className={`border-b border-blue-400 bg-transparent focus:outline-none text-xs w-full ${className}`}
+        className="text-xs font-bold bg-transparent border-b border-blue-400 focus:outline-none text-gray-900 w-full"
       />
     );
   }
 
   return (
-    <span
-      onClick={() => setEditing(true)}
-      title="Click to edit"
-      className={`cursor-pointer hover:text-blue-600 hover:underline decoration-dashed ${className}`}
-    >
-      {value || placeholder || "—"}
-    </span>
+    <div className="flex items-center gap-1 group/title min-w-0">
+      <span className="text-xs font-bold text-gray-900 leading-tight truncate">
+        {getDayTitle(day, dayPlan)}
+      </span>
+      <button
+        onClick={() => setEditing(true)}
+        className="text-gray-300 hover:text-gray-500 opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0 text-xs leading-none"
+        title="Edit title"
+      >
+        ✏️
+      </button>
+    </div>
   );
 }
 
-// ── ExerciseRow ───────────────────────────────────────────────────────────────
+// ── ExerciseCard ──────────────────────────────────────────────────────────────
+// Simplified overview card — name, sets×reps pill, muscle tags, calorie estimate.
 
-function ExerciseRow({ exercise, unit, onUpdate, onSwap, onRemove }) {
-  const weightValue =
-    exercise.weight != null
-      ? unit === "imperial"
-        ? `${(exercise.weight * 2.20462).toFixed(1)} lbs`
-        : `${exercise.weight} kg`
-      : "bodyweight";
-
-  function saveWeight(raw) {
-    const trimmed = raw.trim().toLowerCase();
-    if (!trimmed || trimmed === "bodyweight" || trimmed === "bw") {
-      onUpdate("weight", null);
-    } else {
-      const num = parseFloat(trimmed);
-      if (!isNaN(num)) {
-        onUpdate("weight", unit === "imperial" ? +(num / 2.20462).toFixed(2) : num);
-      }
-    }
-  }
+function ExerciseCard({ exercise, weightKg, hoveredMuscle, onDoubleClick }) {
+  const { primary, secondary } = getMusclesForExercise(exercise);
+  const allMuscles  = [...primary, ...secondary];
+  const isHighlighted = hoveredMuscle && allMuscles.includes(hoveredMuscle);
+  const kcal = estExerciseCalories(exercise.sets, weightKg);
 
   return (
-    <div className="mb-1.5 p-2 bg-gray-50 rounded-lg group">
-      <EditableCell
-        value={exercise.name}
-        onSave={(v) => onUpdate("name", v)}
-        className="font-medium text-gray-800 text-xs block"
-      />
-      <div className="flex items-center gap-1 mt-0.5 text-xs text-gray-500 flex-wrap">
-        <EditableCell
-          value={String(exercise.sets ?? "")}
-          onSave={(v) => onUpdate("sets", parseInt(v) || exercise.sets)}
-          type="number"
-          className="w-6 text-center"
-        />
-        <span>×</span>
-        <EditableCell
-          value={exercise.reps}
-          onSave={(v) => onUpdate("reps", v)}
-          className="w-12"
-        />
-        <span className="text-gray-300">·</span>
-        <EditableCell
-          value={weightValue}
-          onSave={saveWeight}
-          placeholder="bodyweight"
-          className="w-20"
-        />
+    <div
+      onDoubleClick={onDoubleClick}
+      title="Double-click to edit"
+      className={`p-2 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-all select-none ${
+        isHighlighted ? "ring-2 ring-blue-400 bg-blue-50" : ""
+      }`}
+    >
+      <p className="font-semibold text-gray-800 text-xs leading-tight">{exercise.name}</p>
+      <div className="flex items-center flex-wrap gap-1 mt-1">
+        <span className="bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap">
+          {exercise.sets} × {exercise.reps}
+        </span>
+        {kcal && (
+          <span className="bg-gray-100 text-gray-400 text-xs px-1.5 py-0.5 rounded-full whitespace-nowrap">
+            ~{kcal} kcal
+          </span>
+        )}
       </div>
-      <div className="flex flex-wrap gap-1 mt-1">
-        {(exercise.primary_muscles || []).map((m) => (
-          <span key={m} className="bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full">{m}</span>
-        ))}
-        {(exercise.secondary_muscles || []).map((m) => (
-          <span key={m} className="bg-gray-100 text-gray-500 text-xs px-1.5 py-0.5 rounded-full">{m}</span>
-        ))}
-      </div>
-      <div className="flex gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          onClick={onSwap}
-          className="text-xs text-blue-500 hover:text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors"
-        >
-          🔄 Swap
-        </button>
-        <button
-          onClick={onRemove}
-          className="text-xs text-red-400 hover:text-red-600 px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
-        >
-          🗑️
-        </button>
+      {(primary.length > 0 || secondary.length > 0) && (
+        <div className="flex flex-wrap gap-0.5 mt-1">
+          {primary.map((m) => (
+            <span key={m} className={`text-xs px-1.5 py-0.5 rounded-full ${getMuscleColor(m)}`}>{m}</span>
+          ))}
+          {secondary.map((m) => (
+            <span key={m} className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400">{m}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── HoverGapAdd ───────────────────────────────────────────────────────────────
+// Invisible thin div between exercise cards that reveals a ➕ button on hover.
+
+function HoverGapAdd({ onClick }) {
+  return (
+    <div
+      className="group/gap flex items-center justify-center h-4 cursor-pointer"
+      onClick={onClick}
+    >
+      <div className="h-px w-full bg-transparent group-hover/gap:bg-blue-200 transition-colors relative">
+        <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white text-blue-400 text-xs opacity-0 group-hover/gap:opacity-100 transition-opacity rounded-full px-1 border border-blue-200 hover:text-blue-600 hover:border-blue-400 leading-none py-0.5">
+          ➕
+        </span>
       </div>
     </div>
   );
 }
 
-// ── AddButton ─────────────────────────────────────────────────────────────────
+// ── ExerciseDetailModal ───────────────────────────────────────────────────────
 
-function AddButton({ onClick }) {
+function ExerciseDetailModal({ exercise, unit, weightKg, onSave, onRemove, onSwap, onClose }) {
+  const [name,    setName]    = useState(exercise.name || "");
+  const [sets,    setSets]    = useState(String(exercise.sets ?? "3"));
+  const [reps,    setReps]    = useState(exercise.reps || "");
+  const [weight,  setWeight]  = useState("");
+  const [confirmRemove, setConfirmRemove] = useState(false);
+
+  const { primary, secondary } = getMusclesForExercise({ ...exercise, name });
+  const kcal = estExerciseCalories(parseInt(sets) || 3, weightKg);
+
+  // Initialise weight in the display unit.
+  useEffect(() => {
+    if (exercise.weight != null) {
+      setWeight(
+        unit === "imperial"
+          ? String((exercise.weight * 2.20462).toFixed(1))
+          : String(exercise.weight)
+      );
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleSave() {
+    const updated = {
+      ...exercise,
+      name:  name.trim() || exercise.name,
+      sets:  parseInt(sets)  || exercise.sets,
+      reps:  reps             || exercise.reps,
+      weight: weight !== ""
+        ? (unit === "imperial" ? +(parseFloat(weight) / 2.20462).toFixed(2) : parseFloat(weight))
+        : null,
+    };
+    onSave(updated);
+  }
+
   return (
-    <button
-      onClick={onClick}
-      className="w-full text-left text-xs text-gray-300 hover:text-blue-500 py-0.5 px-2 hover:bg-blue-50 rounded transition-colors my-0.5"
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      ➕
-    </button>
+      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl">
+        <div className="flex items-center justify-between p-5 border-b">
+          <h2 className="font-bold text-gray-900 text-lg">Exercise Details</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Name */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Exercise Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full text-lg font-semibold border-b border-gray-200 focus:border-blue-400 focus:outline-none pb-1 text-gray-900 bg-transparent"
+            />
+          </div>
+
+          {/* Coaching tip */}
+          {exercise.notes && (
+            <div className="bg-blue-50 rounded-xl p-3">
+              <p className="text-xs font-semibold text-blue-600 mb-1">Coaching Tip</p>
+              <p className="text-sm text-gray-700">{exercise.notes}</p>
+            </div>
+          )}
+
+          {/* Muscles */}
+          {(primary.length > 0 || secondary.length > 0) && (
+            <div>
+              <p className="text-xs font-medium text-gray-500 mb-1.5">Muscles Activated</p>
+              <div className="flex flex-wrap gap-1.5">
+                {primary.map((m) => (
+                  <span key={m} className={`text-xs px-2.5 py-1 rounded-full font-medium ${getMuscleColor(m)}`}>{m}</span>
+                ))}
+                {secondary.map((m) => (
+                  <span key={m} className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">{m}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Sets / Reps / Weight */}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: "Sets",            val: sets,   setter: setSets,   type: "number", placeholder: "3"   },
+              { label: "Reps",            val: reps,   setter: setReps,   type: "text",   placeholder: "12"  },
+              { label: `Weight (${unit === "imperial" ? "lbs" : "kg"})`, val: weight, setter: setWeight, type: "number", placeholder: "BW" },
+            ].map(({ label, val, setter, type, placeholder }) => (
+              <div key={label}>
+                <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+                <input
+                  type={type}
+                  step={type === "number" ? "0.5" : undefined}
+                  min={type === "number" ? "0" : undefined}
+                  value={val}
+                  onChange={(e) => setter(e.target.value)}
+                  placeholder={placeholder}
+                  className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm font-medium text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* Calories estimate */}
+          {kcal && (
+            <p className="text-sm text-gray-400">
+              ~<span className="font-medium text-gray-600">{kcal} kcal</span> estimated for this exercise
+            </p>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={onSwap}
+              className="flex-1 py-2 border border-blue-500 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors"
+            >
+              🔄 Swap Exercise
+            </button>
+            {confirmRemove ? (
+              <button
+                onClick={onRemove}
+                className="flex-1 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 transition-colors"
+              >
+                Confirm Remove
+              </button>
+            ) : (
+              <button
+                onClick={() => setConfirmRemove(true)}
+                className="py-2 px-3 border border-red-200 text-red-400 rounded-lg text-sm hover:bg-red-50 transition-colors"
+              >
+                🗑️
+              </button>
+            )}
+          </div>
+
+          <button
+            onClick={handleSave}
+            className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+          >
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── RegenerateModal ───────────────────────────────────────────────────────────
+
+function RegenerateModal({ onClose, onGenerate, isGenerating }) {
+  const [disliked,       setDisliked]       = useState("");
+  const [specific,       setSpecific]       = useState("");
+  const [keepStructure,  setKeepStructure]  = useState(true);
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+        <div className="flex items-center justify-between p-5 border-b">
+          <h2 className="font-bold text-gray-900">Let's improve your plan</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              What didn't you like about your current plan?{" "}
+              <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <textarea
+              value={disliked}
+              onChange={(e) => setDisliked(e.target.value)}
+              placeholder="e.g. Too many leg days, meals were too complex…"
+              rows={3}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Any specific changes you want?{" "}
+              <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <textarea
+              value={specific}
+              onChange={(e) => setSpecific(e.target.value)}
+              placeholder="e.g. More upper body, lower calorie meals, add HIIT sessions…"
+              rows={3}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">Keep same workout days structure?</span>
+            <button
+              type="button"
+              onClick={() => setKeepStructure((k) => !k)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                keepStructure ? "bg-blue-600" : "bg-gray-300"
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                keepStructure ? "translate-x-6" : "translate-x-1"
+              }`} />
+            </button>
+          </div>
+
+          <button
+            onClick={() => onGenerate({ dislikedFeedback: disliked, specificChanges: specific, keepStructure })}
+            disabled={isGenerating}
+            className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {isGenerating ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Generating…
+              </span>
+            ) : (
+              "Regenerate Plan →"
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
 // ── SwapModal (exercise) ──────────────────────────────────────────────────────
 
 function SwapModal({ mode, exercise, workoutFocus, profileWeight, onClose, onSelect }) {
-  const [loading, setLoading] = useState(false);
-  const [alts, setAlts] = useState([]);
-  const [customText, setCustomText] = useState("");
-  const [chosen, setChosen] = useState(null);
+  const [loading,     setLoading]     = useState(false);
+  const [alts,        setAlts]        = useState([]);
+  const [customText,  setCustomText]  = useState("");
+  const [chosen,      setChosen]      = useState(null);
 
   useEffect(() => {
     if (mode === "swap" && exercise?.name) fetchAlts();
@@ -216,15 +531,13 @@ function SwapModal({ mode, exercise, workoutFocus, profileWeight, onClose, onSel
     setChosen(null);
     try {
       const data = await swapExercise({
-        exerciseName: useCustom ? null : exercise?.name,
+        exerciseName:  useCustom ? null : exercise?.name,
         primaryMuscle: exercise?.primary_muscles?.[0] || workoutFocus,
-        userWeightKg: profileWeight,
+        userWeightKg:  profileWeight,
         customRequest: useCustom ? customText : undefined,
       });
       setAlts(data.alternatives || []);
-    } catch {
-      // silent fail — user can try custom
-    }
+    } catch { /* silent */ }
     setLoading(false);
   }
 
@@ -237,7 +550,7 @@ function SwapModal({ mode, exercise, workoutFocus, profileWeight, onClose, onSel
         <div className="flex items-center justify-between p-5 border-b">
           <div>
             <h2 className="font-bold text-gray-900">
-              {mode === "swap" ? `Swap: ${exercise?.name}` : `Add Exercise`}
+              {mode === "swap" ? `Swap: ${exercise?.name}` : "Add Exercise"}
             </h2>
             <p className="text-xs text-gray-400 mt-0.5">{workoutFocus}</p>
           </div>
@@ -266,9 +579,7 @@ function SwapModal({ mode, exercise, workoutFocus, profileWeight, onClose, onSel
                   {alt.primary_muscles?.length > 0 && (
                     <p className="text-xs text-blue-600 mt-1">{alt.primary_muscles.join(", ")}</p>
                   )}
-                  {alt.notes && (
-                    <p className="text-xs text-gray-400 italic mt-0.5">{alt.notes}</p>
-                  )}
+                  {alt.notes && <p className="text-xs text-gray-400 italic mt-0.5">{alt.notes}</p>}
                 </button>
               ))}
             </div>
@@ -279,7 +590,7 @@ function SwapModal({ mode, exercise, workoutFocus, profileWeight, onClose, onSel
             <textarea
               value={customText}
               onChange={(e) => setCustomText(e.target.value)}
-              placeholder="Describe what you want — e.g. 'something for home, no equipment'…"
+              placeholder="e.g. 'something for home, no equipment'…"
               rows={2}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-2"
             />
@@ -309,12 +620,11 @@ function SwapModal({ mode, exercise, workoutFocus, profileWeight, onClose, onSel
 // ── SwapMealModal ─────────────────────────────────────────────────────────────
 
 function SwapMealModal({ mealType, mealData, profile, onClose, onSelect }) {
-  const [loading, setLoading] = useState(false);
-  const [alts, setAlts] = useState([]);
-  const [chosen, setChosen] = useState(null);
+  const [loading,    setLoading]    = useState(false);
+  const [alts,       setAlts]       = useState([]);
+  const [chosen,     setChosen]     = useState(null);
   const [customText, setCustomText] = useState("");
 
-  // Auto-fetch on open
   useEffect(() => { fetchAlts(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchAlts(useCustom = false) {
@@ -326,22 +636,18 @@ function SwapMealModal({ mealType, mealData, profile, onClose, onSelect }) {
       try {
         restrictions = Array.isArray(profile?.dietary_restrictions)
           ? profile.dietary_restrictions
-          : profile?.dietary_restrictions
-          ? JSON.parse(profile.dietary_restrictions)
-          : [];
+          : profile?.dietary_restrictions ? JSON.parse(profile.dietary_restrictions) : [];
       } catch { restrictions = []; }
 
       const data = await swapMeal({
         mealType,
-        dietType: profile?.diet_type,
+        dietType:      profile?.diet_type,
         calorieTarget: mealData?.calories,
         restrictions,
         customRequest: useCustom ? customText : undefined,
       });
       setAlts(data.alternatives || []);
-    } catch {
-      // silent fail
-    }
+    } catch { /* silent */ }
     setLoading(false);
   }
 
@@ -431,28 +737,24 @@ function SwapMealModal({ mealType, mealData, profile, onClose, onSelect }) {
 // ── SaveMealModal ─────────────────────────────────────────────────────────────
 
 function SaveMealModal({ mealType, mealData, onClose, onSave }) {
-  const [prepTime, setPrepTime] = useState("");
-  const [cookTime, setCookTime] = useState("");
-  const [servings, setServings] = useState("1");
-  const [recipeUrl, setRecipeUrl] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [prepTime,   setPrepTime]   = useState("");
+  const [cookTime,   setCookTime]   = useState("");
+  const [servings,   setServings]   = useState("1");
+  const [recipeUrl,  setRecipeUrl]  = useState("");
+  const [saving,     setSaving]     = useState(false);
 
   async function handleSave() {
     setSaving(true);
     try {
       await onSave({
-        name: mealData.name,
-        meal_type: mealType,
-        ingredients: mealData.ingredients || [],
-        macros: mealData.macros || null,
+        name: mealData.name, meal_type: mealType,
+        ingredients: mealData.ingredients || [], macros: mealData.macros || null,
         prep_time_minutes: prepTime ? parseInt(prepTime) : null,
         cook_time_minutes: cookTime ? parseInt(cookTime) : null,
         servings: servings ? parseFloat(servings) : 1,
         external_recipe_url: recipeUrl || null,
       });
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   return (
@@ -470,7 +772,6 @@ function SaveMealModal({ mealType, mealData, onClose, onSave }) {
         </div>
 
         <div className="p-5 space-y-4">
-          {/* Meal preview */}
           <div className="bg-gray-50 rounded-xl p-3">
             <p className="font-semibold text-gray-900 text-sm">{mealData?.name}</p>
             <p className="text-xs text-blue-600 mt-0.5">{mealData?.calories} kcal · {capitalize(mealType)}</p>
@@ -478,56 +779,29 @@ function SaveMealModal({ mealType, mealData, onClose, onSave }) {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Prep time (min)</label>
-              <input
-                type="number"
-                value={prepTime}
-                onChange={(e) => setPrepTime(e.target.value)}
-                placeholder="e.g. 10"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Cook time (min)</label>
-              <input
-                type="number"
-                value={cookTime}
-                onChange={(e) => setCookTime(e.target.value)}
-                placeholder="e.g. 20"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+            {[["Prep time (min)", prepTime, setPrepTime], ["Cook time (min)", cookTime, setCookTime]].map(([lbl, v, s]) => (
+              <div key={lbl}>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{lbl}</label>
+                <input type="number" value={v} onChange={(e) => s(e.target.value)} placeholder="e.g. 10"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+            ))}
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Servings</label>
-            <input
-              type="number"
-              step="0.5"
-              min="0.5"
-              value={servings}
-              onChange={(e) => setServings(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <input type="number" step="0.5" min="0.5" value={servings} onChange={(e) => setServings(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Recipe URL (optional)</label>
-            <input
-              type="url"
-              value={recipeUrl}
-              onChange={(e) => setRecipeUrl(e.target.value)}
-              placeholder="https://…"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <input type="url" value={recipeUrl} onChange={(e) => setRecipeUrl(e.target.value)} placeholder="https://…"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
 
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
+          <button onClick={handleSave} disabled={saving}
+            className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
             {saving ? "Saving…" : "Save to My Meals 💾"}
           </button>
         </div>
@@ -539,18 +813,18 @@ function SaveMealModal({ mealType, mealData, onClose, onSave }) {
 // ── AddCustomMealModal ────────────────────────────────────────────────────────
 
 function AddCustomMealModal({ mealType, onClose, onAdd }) {
-  const [name, setName] = useState("");
-  const [calories, setCalories] = useState("");
-  const [protein, setProtein] = useState("");
-  const [carbs, setCarbs] = useState("");
-  const [fat, setFat] = useState("");
+  const [name,         setName]         = useState("");
+  const [calories,     setCalories]     = useState("");
+  const [protein,      setProtein]      = useState("");
+  const [carbs,        setCarbs]        = useState("");
+  const [fat,          setFat]          = useState("");
   const [instructions, setInstructions] = useState("");
-  const [ingredients, setIngredients] = useState([]);
-  const [ingInput, setIngInput] = useState("");
+  const [ingredients,  setIngredients]  = useState([]);
+  const [ingInput,     setIngInput]     = useState("");
 
   function addIngredient() {
     if (!ingInput.trim()) return;
-    setIngredients((prev) => [...prev, ingInput.trim()]);
+    setIngredients((p) => [...p, ingInput.trim()]);
     setIngInput("");
   }
 
@@ -562,11 +836,7 @@ function AddCustomMealModal({ mealType, onClose, onAdd }) {
       ingredients,
       ...(instructions.trim() && { instructions: instructions.trim() }),
       ...((protein || carbs || fat) && {
-        macros: {
-          protein_g: parseInt(protein) || 0,
-          carbs_g: parseInt(carbs) || 0,
-          fat_g: parseInt(fat) || 0,
-        },
+        macros: { protein_g: parseInt(protein) || 0, carbs_g: parseInt(carbs) || 0, fat_g: parseInt(fat) || 0 },
       }),
     });
   }
@@ -585,44 +855,25 @@ function AddCustomMealModal({ mealType, onClose, onAdd }) {
         <div className="p-5 space-y-3">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Meal name *</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Avocado toast"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Avocado toast"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Ingredients</label>
             <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                value={ingInput}
-                onChange={(e) => setIngInput(e.target.value)}
+              <input type="text" value={ingInput} onChange={(e) => setIngInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addIngredient(); } }}
                 placeholder="Add ingredient…"
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                onClick={addIngredient}
-                className="px-3 py-2 bg-gray-100 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
-              >
-                +
-              </button>
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <button onClick={addIngredient} className="px-3 py-2 bg-gray-100 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors">+</button>
             </div>
             {ingredients.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {ingredients.map((ing, i) => (
                   <span key={i} className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-xs">
                     {ing}
-                    <button
-                      onClick={() => setIngredients(ingredients.filter((_, j) => j !== i))}
-                      className="text-blue-400 hover:text-blue-600"
-                    >
-                      ×
-                    </button>
+                    <button onClick={() => setIngredients(ingredients.filter((_, j) => j !== i))} className="text-blue-400 hover:text-blue-600">×</button>
                   </span>
                 ))}
               </div>
@@ -631,46 +882,28 @@ function AddCustomMealModal({ mealType, onClose, onAdd }) {
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Calories</label>
-            <input
-              type="number"
-              value={calories}
-              onChange={(e) => setCalories(e.target.value)}
-              placeholder="e.g. 400"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <input type="number" value={calories} onChange={(e) => setCalories(e.target.value)} placeholder="e.g. 400"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
 
           <div className="grid grid-cols-3 gap-2">
             {[["Protein (g)", protein, setProtein], ["Carbs (g)", carbs, setCarbs], ["Fat (g)", fat, setFat]].map(([label, val, setter]) => (
               <div key={label}>
                 <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-                <input
-                  type="number"
-                  value={val}
-                  onChange={(e) => setter(e.target.value)}
-                  placeholder="0"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <input type="number" value={val} onChange={(e) => setter(e.target.value)} placeholder="0"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             ))}
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Instructions (optional)</label>
-            <textarea
-              value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
-              placeholder="How to prepare…"
-              rows={2}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            />
+            <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} placeholder="How to prepare…" rows={2}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
           </div>
 
-          <button
-            onClick={handleAdd}
-            disabled={!name.trim()}
-            className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
+          <button onClick={handleAdd} disabled={!name.trim()}
+            className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
             Add Meal
           </button>
         </div>
@@ -681,9 +914,9 @@ function AddCustomMealModal({ mealType, onClose, onAdd }) {
 
 // ── MuscleBreakdown ───────────────────────────────────────────────────────────
 
-function MuscleBreakdown({ workoutPlan }) {
+function MuscleBreakdown({ workoutPlan, hoveredMuscle, onMuscleHover }) {
   const [open, setOpen] = useState(false);
-  const counts = getMuscleBreakdown(workoutPlan);
+  const counts  = getMuscleBreakdown(workoutPlan);
   const entries = Object.entries(counts).sort(([, a], [, b]) => b - a);
 
   return (
@@ -699,22 +932,25 @@ function MuscleBreakdown({ workoutPlan }) {
       {open && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           {entries.length === 0 ? (
-            <p className="text-sm text-gray-400">
-              No muscle data yet — swap exercises to add muscle group tags.
-            </p>
+            <p className="text-sm text-gray-400">No muscle data yet — muscles are derived automatically from exercise names.</p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {entries.map(([muscle, count]) => (
-                <span
-                  key={muscle}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium capitalize ${
-                    count >= 2 ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
-                  }`}
-                >
-                  {muscle} × {count}
-                </span>
-              ))}
-            </div>
+            <>
+              <p className="text-xs text-gray-400 mb-3">Hover a muscle to highlight matching exercises</p>
+              <div className="flex flex-wrap gap-2">
+                {entries.map(([muscle, count]) => (
+                  <button
+                    key={muscle}
+                    onMouseEnter={() => onMuscleHover(muscle)}
+                    onMouseLeave={() => onMuscleHover(null)}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium capitalize transition-all ${getMuscleColor(muscle)} ${
+                      hoveredMuscle === muscle ? "ring-2 ring-offset-1 ring-blue-400 scale-105" : "hover:scale-105"
+                    }`}
+                  >
+                    {muscle} × {count}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
         </div>
       )}
@@ -725,23 +961,26 @@ function MuscleBreakdown({ workoutPlan }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function Plan() {
-  const [plan, setPlan] = useState(null);
-  const [workoutPlan, setWorkoutPlan] = useState(null);
-  const [mealPlan, setMealPlan] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [savingStatus, setSavingStatus] = useState("idle"); // "idle"|"saving"|"saved"
-  const [swapModal, setSwapModal] = useState(null);
-  const [mealModal, setMealModal] = useState(null); // { type, mealType, mealData }
+  const [plan,            setPlan]            = useState(null);
+  const [workoutPlan,     setWorkoutPlan]     = useState(null);
+  const [mealPlan,        setMealPlan]        = useState(null);
+  const [profile,         setProfile]         = useState(null);
+  const [isLoading,       setIsLoading]       = useState(true);
+  const [isGenerating,    setIsGenerating]    = useState(false);
+  const [savingStatus,    setSavingStatus]    = useState("idle"); // "idle"|"saving"|"saved"
+  const [swapModal,       setSwapModal]       = useState(null);
+  const [exerciseModal,   setExerciseModal]   = useState(null); // { day, idx, exercise }
+  const [mealModal,       setMealModal]       = useState(null); // { type, mealType, mealData }
+  const [showRegenModal,  setShowRegenModal]  = useState(false);
+  const [hoveredMuscle,   setHoveredMuscle]   = useState(null);
   const { toast, showToast } = useToast();
-  const location = useLocation();
-  const shouldAutoGenerate = useRef(location.state?.autoGenerate === true);
-  const saveTimer = useRef(null);
-  const mealSaveTimer = useRef(null);
+  const location            = useLocation();
+  const shouldAutoGenerate  = useRef(location.state?.autoGenerate === true);
+  const saveTimer           = useRef(null);
+  const mealSaveTimer       = useRef(null);
 
   const profileWeight = profile?.weight_kg || 70;
-  const unit = profile?.unit_preference || "metric";
+  const unit          = profile?.unit_preference || "metric";
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
@@ -750,7 +989,7 @@ export default function Plan() {
       .then(([planData, profileData]) => {
         setPlan(planData);
         if (planData?.workout_plan) setWorkoutPlan(planData.workout_plan);
-        if (planData?.meal_plan) setMealPlan(planData.meal_plan);
+        if (planData?.meal_plan)    setMealPlan(planData.meal_plan);
         setProfile(profileData);
       })
       .catch(() => {})
@@ -787,18 +1026,17 @@ export default function Plan() {
   const scheduleMealSave = useCallback((mp) => {
     clearTimeout(mealSaveTimer.current);
     mealSaveTimer.current = setTimeout(async () => {
-      try {
-        await patchMealPlan(mp);
-      } catch { /* silent */ }
+      try { await patchMealPlan(mp); } catch { /* silent */ }
     }, 600);
   }, []);
 
-  // ── Generate ──────────────────────────────────────────────────────────────
+  // ── Generate / Regenerate ─────────────────────────────────────────────────
 
-  async function handleGenerate() {
+  async function handleGenerate(feedback = null) {
     setIsGenerating(true);
+    setShowRegenModal(false);
     try {
-      const data = await generatePlan();
+      const data = await generatePlan(feedback);
       setPlan(data);
       setWorkoutPlan(data.workout_plan);
       setMealPlan(data.meal_plan);
@@ -811,14 +1049,12 @@ export default function Plan() {
 
   // ── Workout mutations ─────────────────────────────────────────────────────
 
-  function updateExerciseField(day, idx, field, value) {
+  function updateExercise(day, idx, updated) {
     const newWP = {
       ...workoutPlan,
       [day]: {
         ...workoutPlan[day],
-        exercises: workoutPlan[day].exercises.map((ex, i) =>
-          i === idx ? { ...ex, [field]: value } : ex
-        ),
+        exercises: workoutPlan[day].exercises.map((ex, i) => (i === idx ? updated : ex)),
       },
     };
     setWorkoutPlan(newWP);
@@ -837,6 +1073,19 @@ export default function Plan() {
     scheduleAutoSave(newWP);
   }
 
+  function insertExercise(day, afterIdx, newEx) {
+    const exercises = workoutPlan[day]?.exercises || [];
+    const newExercises = [
+      ...exercises.slice(0, afterIdx + 1),
+      newEx,
+      ...exercises.slice(afterIdx + 1),
+    ];
+    const newWP = { ...workoutPlan, [day]: { ...workoutPlan[day], exercises: newExercises } };
+    setWorkoutPlan(newWP);
+    scheduleAutoSave(newWP);
+    setSwapModal(null);
+  }
+
   function replaceExercise(day, idx, newEx) {
     const newWP = {
       ...workoutPlan,
@@ -850,20 +1099,10 @@ export default function Plan() {
     setSwapModal(null);
   }
 
-  function insertExercise(day, afterIdx, newEx) {
-    const exercises = workoutPlan[day]?.exercises || [];
-    const newExercises = [
-      ...exercises.slice(0, afterIdx + 1),
-      newEx,
-      ...exercises.slice(afterIdx + 1),
-    ];
-    const newWP = {
-      ...workoutPlan,
-      [day]: { ...workoutPlan[day], exercises: newExercises },
-    };
+  function updateDayTitle(day, title) {
+    const newWP = { ...workoutPlan, [day]: { ...workoutPlan[day], title } };
     setWorkoutPlan(newWP);
     scheduleAutoSave(newWP);
-    setSwapModal(null);
   }
 
   // ── Meal mutations ────────────────────────────────────────────────────────
@@ -875,17 +1114,32 @@ export default function Plan() {
   }
 
   // ── Drag and drop ─────────────────────────────────────────────────────────
+  // Two levels: day-swap (type="DAY") and exercise reorder (type="EXERCISE").
 
   function handleDragEnd({ source, destination }) {
-    if (!destination || source.droppableId === destination.droppableId) return;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
+    // Exercise reorder within a day (droppableId = "ex-monday")
+    if (source.droppableId.startsWith("ex-")) {
+      const day = source.droppableId.slice(3);
+      const exercises = [...(workoutPlan[day]?.exercises || [])];
+      const [moved] = exercises.splice(source.index, 1);
+      exercises.splice(destination.index, 0, moved);
+      const newWP = { ...workoutPlan, [day]: { ...workoutPlan[day], exercises } };
+      setWorkoutPlan(newWP);
+      scheduleAutoSave(newWP);
+      return;
+    }
+
+    // Day swap — source and destination are day column droppableIds
+    if (source.droppableId === destination.droppableId) return;
     const fromDay = source.droppableId;
-    const toDay = destination.droppableId;
-
-    const newWP = {
+    const toDay   = destination.droppableId;
+    const newWP   = {
       ...workoutPlan,
       [fromDay]: workoutPlan[toDay] ?? null,
-      [toDay]: workoutPlan[fromDay],
+      [toDay]:   workoutPlan[fromDay],
     };
     setWorkoutPlan(newWP);
     scheduleAutoSave(newWP);
@@ -893,15 +1147,16 @@ export default function Plan() {
 
   // ── Exercise modal helpers ────────────────────────────────────────────────
 
-  function openSwap(day, idx, exercise, focus) {
+  function openSwapFromCard(day, idx, exercise, focus) {
+    setExerciseModal(null);
     setSwapModal({ mode: "swap", day, exerciseIdx: idx, exercise, workoutFocus: focus });
   }
 
-  function openAdd(day, afterIdx, focus) {
+  function openAddExercise(day, afterIdx, focus) {
     setSwapModal({ mode: "add", day, insertAfterIdx: afterIdx, workoutFocus: focus });
   }
 
-  function handleModalSelect(newEx) {
+  function handleSwapModalSelect(newEx) {
     if (!swapModal) return;
     if (swapModal.mode === "swap") {
       replaceExercise(swapModal.day, swapModal.exerciseIdx, newEx);
@@ -928,12 +1183,10 @@ export default function Plan() {
               Saving…
             </span>
           )}
-          {savingStatus === "saved" && (
-            <span className="text-xs text-green-500">✓ Saved</span>
-          )}
+          {savingStatus === "saved" && <span className="text-xs text-green-500">✓ Saved</span>}
         </div>
         <button
-          onClick={handleGenerate}
+          onClick={() => plan ? setShowRegenModal(true) : handleGenerate()}
           disabled={isGenerating || isLoading}
           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 transition-colors"
         >
@@ -964,16 +1217,18 @@ export default function Plan() {
           {/* ── Workout Plan ── */}
           <section>
             <h2 className="text-lg font-semibold text-gray-800 mb-1">Workout Plan</h2>
-            <p className="text-xs text-gray-400 mb-4">Drag a day card to swap it with another day</p>
+            <p className="text-xs text-gray-400 mb-4">
+              Drag ⠿ to swap days · Drag exercise cards to reorder · Double-click any exercise to edit
+            </p>
 
             <DragDropContext onDragEnd={handleDragEnd}>
               <div className="flex gap-3 overflow-x-auto pb-3">
                 {DAYS.map((day) => {
                   const dayPlan = workoutPlan[day];
-                  const kcal = estCalories(dayPlan?.focus, dayPlan?.duration_minutes, profileWeight);
+                  const kcal    = estCalories(dayPlan?.focus, dayPlan?.duration_minutes, profileWeight);
 
                   return (
-                    <Droppable key={day} droppableId={day}>
+                    <Droppable key={day} droppableId={day} type="DAY">
                       {(provided, snapshot) => (
                         <div
                           ref={provided.innerRef}
@@ -994,42 +1249,81 @@ export default function Plan() {
                                 <div
                                   ref={dragProvided.innerRef}
                                   {...dragProvided.draggableProps}
-                                  className={`flex-1 flex flex-col px-3 pb-3 ${
+                                  className={`flex-1 flex flex-col px-2 pb-3 ${
                                     dragSnapshot.isDragging ? "opacity-80" : ""
                                   }`}
                                 >
-                                  <div
-                                    {...dragProvided.dragHandleProps}
-                                    className="flex items-center justify-between mb-1 cursor-grab active:cursor-grabbing"
-                                    title="Drag to move this workout to another day"
-                                  >
-                                    <p className="font-semibold text-gray-900 text-sm leading-tight">
-                                      {dayPlan.focus}
-                                    </p>
-                                    <span className="text-gray-300 text-base select-none ml-1">⠿</span>
+                                  {/* Day header: drag handle + editable title */}
+                                  <div className="flex items-center gap-1 mb-1 px-1">
+                                    <span
+                                      {...dragProvided.dragHandleProps}
+                                      className="text-gray-300 text-base select-none cursor-grab active:cursor-grabbing shrink-0"
+                                      title="Drag to move this workout to another day"
+                                    >
+                                      ⠿
+                                    </span>
+                                    <DayTitleEditor
+                                      day={day}
+                                      dayPlan={dayPlan}
+                                      onSave={(title) => updateDayTitle(day, title)}
+                                    />
                                   </div>
 
-                                  <p className="text-xs text-blue-600 mb-2">
+                                  <p className="text-xs text-blue-600 mb-2 px-1">
                                     {dayPlan.duration_minutes} min
                                     {kcal ? ` · ~${kcal} kcal` : ""}
                                   </p>
 
-                                  {(dayPlan.exercises || []).map((ex, idx) => (
-                                    <div key={idx}>
-                                      <ExerciseRow
-                                        exercise={ex}
-                                        unit={unit}
-                                        onUpdate={(field, val) => updateExerciseField(day, idx, field, val)}
-                                        onSwap={() => openSwap(day, idx, ex, dayPlan.focus)}
-                                        onRemove={() => removeExercise(day, idx)}
-                                      />
-                                      <AddButton onClick={() => openAdd(day, idx, dayPlan.focus)} />
-                                    </div>
-                                  ))}
+                                  {/* Exercise list — inner droppable for reordering */}
+                                  <Droppable droppableId={`ex-${day}`} type="EXERCISE">
+                                    {(exProvided, exSnapshot) => (
+                                      <div
+                                        ref={exProvided.innerRef}
+                                        {...exProvided.droppableProps}
+                                        className={`flex-1 rounded-lg transition-colors ${
+                                          exSnapshot.isDraggingOver ? "bg-blue-50" : ""
+                                        }`}
+                                      >
+                                        {/* Hover-reveal ➕ before first exercise */}
+                                        <HoverGapAdd onClick={() => openAddExercise(day, -1, dayPlan.focus)} />
 
-                                  {(dayPlan.exercises || []).length === 0 && (
-                                    <AddButton onClick={() => openAdd(day, -1, dayPlan.focus)} />
-                                  )}
+                                        {(dayPlan.exercises || []).map((ex, idx) => (
+                                          <Draggable
+                                            key={`${day}-ex-${idx}`}
+                                            draggableId={`${day}-ex-${idx}`}
+                                            index={idx}
+                                          >
+                                            {(exDrag, exDragSnap) => (
+                                              <div
+                                                ref={exDrag.innerRef}
+                                                {...exDrag.draggableProps}
+                                                {...exDrag.dragHandleProps}
+                                                className={`mb-0.5 ${exDragSnap.isDragging ? "opacity-80 rotate-1" : ""}`}
+                                              >
+                                                <ExerciseCard
+                                                  exercise={ex}
+                                                  weightKg={profileWeight}
+                                                  hoveredMuscle={hoveredMuscle}
+                                                  onDoubleClick={() =>
+                                                    setExerciseModal({ day, idx, exercise: ex })
+                                                  }
+                                                />
+                                              </div>
+                                            )}
+                                          </Draggable>
+                                        ))}
+
+                                        {exProvided.placeholder}
+
+                                        {/* Hover-reveal ➕ after last exercise */}
+                                        <HoverGapAdd
+                                          onClick={() =>
+                                            openAddExercise(day, (dayPlan.exercises || []).length - 1, dayPlan.focus)
+                                          }
+                                        />
+                                      </div>
+                                    )}
+                                  </Droppable>
                                 </div>
                               )}
                             </Draggable>
@@ -1050,7 +1344,11 @@ export default function Plan() {
           </section>
 
           {/* ── Muscle Group Breakdown ── */}
-          <MuscleBreakdown workoutPlan={workoutPlan} />
+          <MuscleBreakdown
+            workoutPlan={workoutPlan}
+            hoveredMuscle={hoveredMuscle}
+            onMuscleHover={setHoveredMuscle}
+          />
 
           {/* ── Meal Plan ── */}
           {mealPlan && (
@@ -1141,6 +1439,39 @@ export default function Plan() {
         </div>
       )}
 
+      {/* ── Regenerate Modal ── */}
+      {showRegenModal && (
+        <RegenerateModal
+          onClose={() => setShowRegenModal(false)}
+          onGenerate={handleGenerate}
+          isGenerating={isGenerating}
+        />
+      )}
+
+      {/* ── Exercise Detail Modal (double-click) ── */}
+      {exerciseModal && (
+        <ExerciseDetailModal
+          exercise={exerciseModal.exercise}
+          unit={unit}
+          weightKg={profileWeight}
+          onClose={() => setExerciseModal(null)}
+          onSave={(updated) => {
+            updateExercise(exerciseModal.day, exerciseModal.idx, updated);
+            setExerciseModal(null);
+          }}
+          onRemove={() => {
+            removeExercise(exerciseModal.day, exerciseModal.idx);
+            setExerciseModal(null);
+          }}
+          onSwap={() => openSwapFromCard(
+            exerciseModal.day,
+            exerciseModal.idx,
+            exerciseModal.exercise,
+            workoutPlan[exerciseModal.day]?.focus
+          )}
+        />
+      )}
+
       {/* ── Exercise Swap / Add Modal ── */}
       {swapModal && (
         <SwapModal
@@ -1149,7 +1480,7 @@ export default function Plan() {
           workoutFocus={swapModal.workoutFocus}
           profileWeight={profileWeight}
           onClose={() => setSwapModal(null)}
-          onSelect={handleModalSelect}
+          onSelect={handleSwapModalSelect}
         />
       )}
 
@@ -1160,10 +1491,7 @@ export default function Plan() {
           mealData={mealModal.mealData}
           profile={profile}
           onClose={() => setMealModal(null)}
-          onSelect={(newMeal) => {
-            updateMealSlot(mealModal.mealType, newMeal);
-            setMealModal(null);
-          }}
+          onSelect={(newMeal) => { updateMealSlot(mealModal.mealType, newMeal); setMealModal(null); }}
         />
       )}
 
@@ -1184,10 +1512,7 @@ export default function Plan() {
         <AddCustomMealModal
           mealType={mealModal.mealType}
           onClose={() => setMealModal(null)}
-          onAdd={(newMeal) => {
-            updateMealSlot(mealModal.mealType, newMeal);
-            setMealModal(null);
-          }}
+          onAdd={(newMeal) => { updateMealSlot(mealModal.mealType, newMeal); setMealModal(null); }}
         />
       )}
     </div>

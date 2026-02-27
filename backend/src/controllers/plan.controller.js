@@ -22,7 +22,8 @@ async function generatePlan(req, res) {
     return res.status(400).json({ error: "Complete your profile first" });
   }
 
-  const aiPlan = await generateWeeklyPlan(profile);
+  const feedback = req.body?.feedback || null;
+  const aiPlan = await generateWeeklyPlan(profile, feedback);
   const weekStart = getMondayOfCurrentWeek();
 
   const savedPlan = await savePlan(
