@@ -16,13 +16,16 @@ async function saveLog(userId, logData) {
     weight_kg,
     workout_completed,
     notes,
+    meals_log,
+    workout_log,
   } = logData;
 
   const result = await pool.query(
     `INSERT INTO daily_logs
        (user_id, log_date, calories, protein_g, carbs_g, fat_g,
-        water_ml, sleep_hours, energy_level, weight_kg, workout_completed, notes)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        water_ml, sleep_hours, energy_level, weight_kg, workout_completed, notes,
+        meals_log, workout_log)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      ON CONFLICT (user_id, log_date) DO UPDATE SET
        calories          = EXCLUDED.calories,
        protein_g         = EXCLUDED.protein_g,
@@ -33,7 +36,9 @@ async function saveLog(userId, logData) {
        energy_level      = EXCLUDED.energy_level,
        weight_kg         = EXCLUDED.weight_kg,
        workout_completed = EXCLUDED.workout_completed,
-       notes             = EXCLUDED.notes
+       notes             = EXCLUDED.notes,
+       meals_log         = EXCLUDED.meals_log,
+       workout_log       = EXCLUDED.workout_log
      RETURNING *`,
     [
       userId,
@@ -48,6 +53,8 @@ async function saveLog(userId, logData) {
       weight_kg ?? null,
       workout_completed ?? false,
       notes ?? null,
+      meals_log ?? null,
+      workout_log ?? null,
     ]
   );
 

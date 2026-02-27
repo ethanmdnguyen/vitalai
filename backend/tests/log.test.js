@@ -78,6 +78,28 @@ describe("POST /api/logs", () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/energy_level/i);
   });
+
+  it("saves meals_log and workout_log JSON strings and returns them", async () => {
+    const mealsLog = JSON.stringify({
+      breakfast: [{ id: "1", name: "Oatmeal", calories: 400, protein_g: 15, carbs_g: 60, fat_g: 8 }],
+      lunch: [], dinner: [], snack: [],
+    });
+    const workoutLog = JSON.stringify({
+      completedExIds: [0, 1],
+      extraExercises: [{ name: "Plank", sets: "3", reps: "60s" }],
+      skipReason: "",
+    });
+
+    // Use the same values as the upsert test so the GET test below still sees 2400/5.
+    const res = await request(app)
+      .post("/api/logs")
+      .set("Authorization", `Bearer ${authToken}`)
+      .send({ ...validLog, calories: 2400, energy_level: 5, meals_log: mealsLog, workout_log: workoutLog });
+
+    expect(res.status).toBe(200);
+    expect(res.body.meals_log).toBe(mealsLog);
+    expect(res.body.workout_log).toBe(workoutLog);
+  });
 });
 
 describe("GET /api/logs/today", () => {
