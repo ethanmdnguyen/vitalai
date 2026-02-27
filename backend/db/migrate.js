@@ -52,6 +52,17 @@ async function migrate() {
     await client.query("ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS meals_log TEXT");
     await client.query("ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS workout_log TEXT");
 
+    // v3 migrations — profiles new columns.
+    await client.query("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS steps_goal INT DEFAULT 10000");
+    await client.query("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS morning_checkin_enabled BOOLEAN DEFAULT TRUE");
+
+    // v3 migrations — daily_logs new columns.
+    await client.query("ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS steps INT");
+    await client.query("ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS distance_km DECIMAL(6,2)");
+    await client.query("ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS floors_climbed INT");
+    await client.query("ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS morning_energy INT CHECK(morning_energy BETWEEN 1 AND 5)");
+    await client.query("ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS morning_focus TEXT");
+
     console.log("Migration complete: all tables and columns applied successfully.");
   } catch (err) {
     console.error("Migration failed:", err.message);

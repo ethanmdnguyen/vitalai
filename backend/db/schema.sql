@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS profiles (
   event_type VARCHAR(100),
   event_date DATE,
   event_name VARCHAR(255),
+  -- v3 fields
+  steps_goal INT DEFAULT 10000,
+  morning_checkin_enabled BOOLEAN DEFAULT TRUE,
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -67,6 +70,12 @@ CREATE TABLE IF NOT EXISTS daily_logs (
   notes TEXT,
   meals_log TEXT,
   workout_log TEXT,
+  -- v3 fields
+  steps INT,
+  distance_km DECIMAL(6,2),
+  floors_climbed INT,
+  morning_energy INT CHECK(morning_energy BETWEEN 1 AND 5),
+  morning_focus TEXT,
   UNIQUE(user_id, log_date)
 );
 
@@ -102,5 +111,41 @@ CREATE TABLE IF NOT EXISTS grocery_items (
   meal_type VARCHAR(50),
   category VARCHAR(100),
   checked BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- v3 tables
+
+CREATE TABLE IF NOT EXISTS bad_habit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  log_date DATE NOT NULL,
+  habits JSONB NOT NULL DEFAULT '[]',
+  ai_analysis TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  title VARCHAR(500) NOT NULL,
+  category VARCHAR(50) NOT NULL DEFAULT 'personal',
+  due_date DATE,
+  notes TEXT,
+  completed BOOLEAN DEFAULT FALSE,
+  completed_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS saved_workouts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  type VARCHAR(50) NOT NULL DEFAULT 'day',
+  exercises TEXT NOT NULL,
+  muscle_groups TEXT,
+  estimated_duration_minutes INT,
+  estimated_calories INT,
+  notes TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
