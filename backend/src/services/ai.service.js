@@ -41,7 +41,7 @@ async function generateWeeklyPlan(profile, feedback = null) {
     ? profile.dietary_restrictions.join(", ")
     : "None";
 
-  const prompt = `You are an expert personal trainer and nutritionist. Create a detailed, personalized weekly plan for this user:
+  let prompt = `You are an expert personal trainer and nutritionist. Create a detailed, personalized weekly plan for this user:
 
 Body & Fitness:
 - Age: ${profile.age}, Weight: ${profile.weight_kg}kg, Height: ${profile.height_cm}cm
@@ -92,14 +92,16 @@ Set non-workout days to null. Distribute workout days based on workout_days_per_
   }
 
   try {
+    console.log("[ai.service] generateWeeklyPlan: calling Gemini, feedback =", feedback ? "provided" : "none");
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(prompt);
-    const plan = JSON.parse(extractJson(result.response.text()));
+    const raw = result.response.text();
+    console.log("[ai.service] generateWeeklyPlan: response received, parsing JSON...");
+    const plan = JSON.parse(extractJson(raw));
+    console.log("[ai.service] generateWeeklyPlan: success");
     return plan;
   } catch (err) {
-    if (err instanceof SyntaxError) {
-      throw new Error("AI service temporarily unavailable. Please try again.");
-    }
+    console.error("[ai.service] generateWeeklyPlan error:", err.message);
     throw new Error("AI service temporarily unavailable. Please try again.");
   }
 }
@@ -171,11 +173,16 @@ Return ONLY a valid JSON array with exactly 3 objects. No markdown, no extra tex
 ]`;
 
   try {
+    console.log("[ai.service] suggestExerciseAlternatives: calling Gemini...");
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(prompt);
-    const parsed = JSON.parse(extractJson(result.response.text()));
+    const raw = result.response.text();
+    console.log("[ai.service] suggestExerciseAlternatives: parsing response...");
+    const parsed = JSON.parse(extractJson(raw));
+    console.log("[ai.service] suggestExerciseAlternatives: success,", parsed.length, "alternatives");
     return Array.isArray(parsed) ? parsed.slice(0, 3) : [];
-  } catch {
+  } catch (err) {
+    console.error("[ai.service] suggestExerciseAlternatives error:", err.message);
     throw new Error("AI service temporarily unavailable. Please try again.");
   }
 }

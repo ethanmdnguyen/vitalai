@@ -16,14 +16,17 @@ function getMondayOfCurrentWeek() {
 
 async function generatePlan(req, res) {
   const userId = req.user.id;
+  console.log("[plan.controller] generatePlan: userId =", userId);
 
   const profile = await getProfileByUserId(userId);
   if (!profile) {
+    console.log("[plan.controller] generatePlan: no profile found");
     return res.status(400).json({ error: "Complete your profile first" });
   }
 
+  console.log("[plan.controller] generatePlan: profile found, calling AI...");
   const feedback = req.body?.feedback || null;
-  const aiPlan = await generateWeeklyPlan(profile, feedback);
+  const aiPlan = await generateWeeklyPlan(profile, feedback || null);
   const weekStart = getMondayOfCurrentWeek();
 
   const savedPlan = await savePlan(
@@ -34,6 +37,7 @@ async function generatePlan(req, res) {
     aiPlan.notes
   );
 
+  console.log("[plan.controller] generatePlan: plan saved successfully, id =", savedPlan.id);
   return res.status(200).json(savedPlan);
 }
 

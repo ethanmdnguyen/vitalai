@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
+import { SlidersHorizontal } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
   generatePlan, getCurrentPlan,
@@ -170,24 +171,19 @@ function estExerciseCalories(sets, weightKg = 70) {
   return Math.round((sets || 3) * (weightKg || 70) * 0.025);
 }
 
-function getDayTitle(day, dayPlan) {
-  if (dayPlan?.title) return dayPlan.title;
-  return `${capitalize(day)} — ${dayPlan?.focus || "Workout"}`;
-}
-
 // ── DayTitleEditor ────────────────────────────────────────────────────────────
 
-function DayTitleEditor({ day, dayPlan, onSave }) {
-  const defaultTitle = getDayTitle(day, dayPlan);
+function DayTitleEditor({ dayPlan, onSave }) {
+  const focus = dayPlan?.focus || "";
   const [editing, setEditing] = useState(false);
-  const [val, setVal]         = useState(defaultTitle);
+  const [val, setVal]         = useState(focus);
 
-  useEffect(() => { setVal(getDayTitle(day, dayPlan)); }, [dayPlan?.title, dayPlan?.focus]);
+  useEffect(() => { setVal(dayPlan?.focus || ""); }, [dayPlan?.focus]);
 
   function commit() {
     setEditing(false);
-    const trimmed = val.trim() || defaultTitle;
-    if (trimmed !== getDayTitle(day, dayPlan)) onSave(trimmed);
+    const trimmed = val.trim();
+    if (trimmed !== (dayPlan?.focus || "")) onSave(trimmed);
   }
 
   if (editing) {
@@ -199,24 +195,27 @@ function DayTitleEditor({ day, dayPlan, onSave }) {
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === "Enter")  commit();
-          if (e.key === "Escape") { setEditing(false); setVal(getDayTitle(day, dayPlan)); }
+          if (e.key === "Escape") { setEditing(false); setVal(dayPlan?.focus || ""); }
         }}
-        className="text-xs font-bold bg-transparent border-b border-blue-400 focus:outline-none text-gray-900 w-full"
+        placeholder="Add focus..."
+        className="text-xs bg-transparent border-b border-blue-400 focus:outline-none text-gray-600 italic w-full"
       />
     );
   }
 
   return (
     <div className="flex items-center gap-1 group/title min-w-0">
-      <span className="text-xs font-bold text-gray-900 leading-tight truncate">
-        {getDayTitle(day, dayPlan)}
-      </span>
+      {focus ? (
+        <span className="text-xs text-gray-600 leading-tight truncate">{focus}</span>
+      ) : (
+        <span className="text-xs text-gray-300 italic leading-tight truncate">Add focus...</span>
+      )}
       <button
         onClick={() => setEditing(true)}
-        className="text-gray-300 hover:text-gray-500 opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0 text-xs leading-none"
-        title="Edit title"
+        className="text-gray-300 hover:text-gray-500 opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0"
+        title="Edit focus"
       >
-        ✏️
+        <SlidersHorizontal size={11} />
       </button>
     </div>
   );
@@ -235,21 +234,14 @@ function ExerciseCard({ exercise, weightKg, hoveredMuscle, onDoubleClick }) {
     <div
       onDoubleClick={onDoubleClick}
       title="Double-click to edit"
-      className={`p-2 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-all select-none ${
+      className={`p-4 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-all select-none overflow-hidden ${
         isHighlighted ? "ring-2 ring-blue-400 bg-blue-50" : ""
       }`}
     >
       <p className="font-semibold text-gray-800 text-xs leading-tight">{exercise.name}</p>
-      <div className="flex items-center flex-wrap gap-1 mt-1">
-        <span className="bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap">
-          {exercise.sets} × {exercise.reps}
-        </span>
-        {kcal && (
-          <span className="bg-gray-100 text-gray-400 text-xs px-1.5 py-0.5 rounded-full whitespace-nowrap">
-            ~{kcal} kcal
-          </span>
-        )}
-      </div>
+      <p className="text-xs text-gray-500 mt-1">
+        {exercise.sets} × {exercise.reps}{kcal ? ` · ~${kcal} kcal` : ""}
+      </p>
       {(primary.length > 0 || secondary.length > 0) && (
         <div className="flex flex-wrap gap-0.5 mt-1">
           {primary.map((m) => (
@@ -270,7 +262,7 @@ function ExerciseCard({ exercise, weightKg, hoveredMuscle, onDoubleClick }) {
 function HoverGapAdd({ onClick }) {
   return (
     <div
-      className="group/gap flex items-center justify-center h-4 cursor-pointer"
+      className="group/gap flex items-center justify-center h-6 cursor-pointer"
       onClick={onClick}
     >
       <div className="h-px w-full bg-transparent group-hover/gap:bg-blue-200 transition-colors relative">
@@ -1099,8 +1091,8 @@ export default function Plan() {
     setSwapModal(null);
   }
 
-  function updateDayTitle(day, title) {
-    const newWP = { ...workoutPlan, [day]: { ...workoutPlan[day], title } };
+  function updateDayFocus(day, focus) {
+    const newWP = { ...workoutPlan, [day]: { ...workoutPlan[day], focus } };
     setWorkoutPlan(newWP);
     scheduleAutoSave(newWP);
   }
@@ -1263,9 +1255,8 @@ export default function Plan() {
                                       ⠿
                                     </span>
                                     <DayTitleEditor
-                                      day={day}
                                       dayPlan={dayPlan}
-                                      onSave={(title) => updateDayTitle(day, title)}
+                                      onSave={(focus) => updateDayFocus(day, focus)}
                                     />
                                   </div>
 
@@ -1298,7 +1289,7 @@ export default function Plan() {
                                                 ref={exDrag.innerRef}
                                                 {...exDrag.draggableProps}
                                                 {...exDrag.dragHandleProps}
-                                                className={`mb-0.5 ${exDragSnap.isDragging ? "opacity-80 rotate-1" : ""}`}
+                                                className={`mb-3 ${exDragSnap.isDragging ? "opacity-80 rotate-1" : ""}`}
                                               >
                                                 <ExerciseCard
                                                   exercise={ex}
