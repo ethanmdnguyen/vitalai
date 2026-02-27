@@ -15,11 +15,49 @@ function extractJson(raw) {
 }
 
 async function generateWeeklyPlan(profile) {
+  // Build a rich goal summary from v2 fields, falling back to legacy `goal` field.
+  const goalParts = [];
+  if (profile.primary_goal || profile.goal) {
+    goalParts.push(`Primary goal: ${profile.primary_goal || profile.goal}`);
+  }
+  if (profile.secondary_goals?.length) {
+    goalParts.push(`Secondary goals: ${profile.secondary_goals.join(", ")}`);
+  }
+  if (profile.goal_intensity) {
+    goalParts.push(profile.goal_intensity);
+  }
+  if (profile.event_type && profile.event_date) {
+    goalParts.push(`Training for ${profile.event_type} on ${profile.event_date}`);
+  } else if (profile.event_type) {
+    goalParts.push(`Training for ${profile.event_type}`);
+  }
+  const goalSummary = goalParts.join(". ") || "General fitness";
+
+  const workoutTypesStr = profile.workout_types?.length
+    ? profile.workout_types.join(", ")
+    : (profile.workout_preferences || "None");
+
+  const dietaryRestrictionsStr = profile.dietary_restrictions?.length
+    ? profile.dietary_restrictions.join(", ")
+    : "None";
+
   const prompt = `You are an expert personal trainer and nutritionist. Create a detailed, personalized weekly plan for this user:
+
+Body & Fitness:
 - Age: ${profile.age}, Weight: ${profile.weight_kg}kg, Height: ${profile.height_cm}cm
-- Goal: ${profile.goal}, Diet type: ${profile.diet_type}
+- Fitness level: ${profile.fitness_level || "Not specified"}
+- Body fat: ${profile.body_fat_percent ? profile.body_fat_percent + "%" : "Not specified"}
+- Injuries/limitations: ${profile.injuries || "None"}
+- Preferred workout types: ${workoutTypesStr}
 - Workout days per week: ${profile.workout_days_per_week}
-- Preferences/limitations: ${profile.workout_preferences || "None"}
+
+Goals:
+- ${goalSummary}
+
+Diet:
+- Diet type: ${profile.diet_type || "standard"}
+- Dietary restrictions: ${dietaryRestrictionsStr}
+- Dietary notes: ${profile.dietary_notes || "None"}
 
 Return ONLY a valid JSON object with NO extra text, markdown, or backticks. Use this exact structure:
 {
