@@ -215,7 +215,8 @@ export default function BadHabits() {
       // Refresh history so new entry appears
       loadHistory();
     } catch (err) {
-      setError(err?.response?.data?.error || "Something went wrong. Please try again.");
+      const detail = err?.response?.data?.details || err?.response?.data?.error;
+      setError(detail || "Something went wrong. Please try again.");
     } finally {
       setIsLoading(false);
     }
