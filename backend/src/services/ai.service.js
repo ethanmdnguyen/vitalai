@@ -290,7 +290,7 @@ ${workoutNote}
 What they did last night / today:
 ${habitLines.join("\n") || "- No specific habits reported"}
 
-Provide a response with exactly these 4 sections. Use the exact section headers:
+Respond with exactly these 4 sections. Use ONLY plain text — no markdown, no bold, no asterisks, no bullet symbols. Use the exact section headers shown (all caps, followed by a colon):
 
 BODY: Explain in 2-3 sentences what these substances/behaviors actually do to the body physiologically. Be educational and specific, not preachy.
 

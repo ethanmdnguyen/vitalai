@@ -10,13 +10,29 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 function parseAnalysisSections(text) {
   if (!text) return {};
   const sections = {};
-  const sectionNames = ["BODY", "GOALS", "RECOVERY", "ADJUSTED PLAN"];
-  sectionNames.forEach((name, idx) => {
-    const nextName = sectionNames[idx + 1];
-    const start = text.indexOf(`${name}:`);
-    if (start === -1) return;
-    const end = nextName ? text.indexOf(`${nextName}:`, start) : text.length;
-    sections[name] = text.slice(start + name.length + 1, end === -1 ? text.length : end).trim();
+  // Match headers that may be wrapped in markdown bold (**BODY:**) and case-insensitive.
+  // Each entry: [canonical key, regex pattern]
+  const sectionDefs = [
+    ["BODY",          /\*{0,2}BODY\*{0,2}\s*:/i],
+    ["GOALS",         /\*{0,2}GOALS?\*{0,2}\s*:/i],
+    ["RECOVERY",      /\*{0,2}RECOVERY\*{0,2}\s*:/i],
+    ["ADJUSTED PLAN", /\*{0,2}ADJUSTED\s+(?:PLAN|WORKOUT(?:\s+PLAN)?)\*{0,2}\s*:/i],
+  ];
+
+  sectionDefs.forEach(([name, regex], idx) => {
+    const match = text.match(regex);
+    if (!match) return;
+    const contentStart = match.index + match[0].length;
+    // Find where the next section starts
+    let contentEnd = text.length;
+    for (let j = idx + 1; j < sectionDefs.length; j++) {
+      const nextMatch = text.slice(contentStart).match(sectionDefs[j][1]);
+      if (nextMatch) {
+        contentEnd = contentStart + nextMatch.index;
+        break;
+      }
+    }
+    sections[name] = text.slice(contentStart, contentEnd).trim();
   });
   return sections;
 }
@@ -155,6 +171,9 @@ function HistoryItem({ log }) {
           <AnalysisSection icon="🎯" label="Goals" content={sections["GOALS"]} colorClasses="bg-yellow-50 border-yellow-200" />
           <AnalysisSection icon="💧" label="Recovery" content={sections["RECOVERY"]} colorClasses="bg-green-50 border-green-200" />
           <AnalysisSection icon="🏋️" label="Adjusted Plan" content={sections["ADJUSTED PLAN"]} colorClasses="bg-blue-50 border-blue-200" />
+          {!sections["BODY"] && !sections["GOALS"] && !sections["RECOVERY"] && (
+            <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{log.analysis}</p>
+          )}
         </div>
       )}
     </div>
@@ -438,6 +457,7 @@ export default function BadHabits() {
           {analysis && !isLoading && (
             <div className="space-y-3">
               <h2 className="text-base font-semibold text-gray-800">Your Recovery Plan</h2>
+              {/* Structured sections (parsed from Gemini's response) */}
               <AnalysisSection
                 icon="🧬"
                 label="What's Happening in Your Body"
@@ -462,6 +482,12 @@ export default function BadHabits() {
                 content={sections["ADJUSTED PLAN"]}
                 colorClasses="bg-blue-50 border-blue-200"
               />
+              {/* Fallback: show raw text if Gemini used an unexpected format */}
+              {!sections["BODY"] && !sections["GOALS"] && !sections["RECOVERY"] && (
+                <div className="rounded-xl p-4 border bg-gray-50 border-gray-200">
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{analysis}</p>
+                </div>
+              )}
             </div>
           )}
         </div>
