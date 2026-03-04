@@ -5,9 +5,10 @@
 const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/auth");
-const { createOrUpdateLog, getTodayLog } = require("../controllers/log.controller");
+const { createOrUpdateLog, getTodayLog, patchTodayLogHandler } = require("../controllers/log.controller");
 
 router.post("/", authMiddleware, createOrUpdateLog);
 router.get("/today", authMiddleware, getTodayLog);
+router.patch("/today", authMiddleware, patchTodayLogHandler);
 
 module.exports = router;
