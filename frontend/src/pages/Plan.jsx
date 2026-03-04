@@ -2,9 +2,13 @@
 // v3: simplified exercise cards, double-click detail modal, hover muscle highlights,
 //     per-exercise DnD reordering, editable day titles, regenerate-with-feedback modal.
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
+import {
+  SlidersHorizontal, Clock, Dumbbell, Zap, RefreshCw, Trash2, Bookmark,
+  Plus, Moon, Check, ChevronDown, ChevronUp, X, Pencil, GripVertical,
+} from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
   generatePlan, getCurrentPlan,
@@ -22,22 +26,30 @@ const DAY_LABELS = {
   monday: "Mon", tuesday: "Tue", wednesday: "Wed", thursday: "Thu",
   friday: "Fri", saturday: "Sat", sunday: "Sun",
 };
+const DAY_LABELS_FULL = {
+  monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday",
+  friday: "Friday", saturday: "Saturday", sunday: "Sunday",
+};
 const MEALS = ["breakfast", "lunch", "dinner", "snack"];
 const MET   = { hiit: 10, running: 9, swimming: 8, cycling: 7, weightlifting: 5, yoga: 3, pilates: 3 };
 
 // Keyword → muscle groups (used when AI doesn't supply primary_muscles).
 const MUSCLE_LOOKUP = {
+  // ── Chest ──────────────────────────────────────────────────────────────────
   "bench press":    ["Chest", "Triceps"],
   "push-up":        ["Chest", "Triceps"],
   "push up":        ["Chest", "Triceps"],
   "pushup":         ["Chest", "Triceps"],
   "chest fly":      ["Chest"],
+  "chest press":    ["Chest", "Triceps"],
   "dumbbell fly":   ["Chest"],
   "cable fly":      ["Chest"],
   "cable crossover":["Chest"],
   "incline press":  ["Chest", "Shoulders"],
   "decline press":  ["Chest"],
   "dip":            ["Chest", "Triceps"],
+  "pec deck":       ["Chest"],
+  // ── Back ───────────────────────────────────────────────────────────────────
   "pull-up":        ["Back", "Biceps"],
   "pull up":        ["Back", "Biceps"],
   "pullup":         ["Back", "Biceps"],
@@ -48,6 +60,18 @@ const MUSCLE_LOOKUP = {
   "lat pulldown":   ["Back", "Biceps"],
   "face pull":      ["Shoulders", "Back"],
   "hyperextension": ["Back", "Glutes"],
+  "good morning":   ["Back", "Hamstrings"],
+  "superman":       ["Back", "Glutes"],
+  "reverse hyper":  ["Glutes", "Back"],
+  "back extension": ["Back", "Glutes"],
+  "seated row":     ["Back", "Biceps"],
+  "cable row":      ["Back", "Biceps"],
+  "pendlay":        ["Back", "Biceps"],
+  "t-bar row":      ["Back", "Biceps"],
+  "muscle up":      ["Back", "Chest"],
+  "pull down":      ["Back", "Biceps"],
+  "nordic":         ["Hamstrings"],
+  // ── Shoulders ──────────────────────────────────────────────────────────────
   "shoulder press": ["Shoulders", "Triceps"],
   "overhead press": ["Shoulders", "Triceps"],
   "ohp":            ["Shoulders", "Triceps"],
@@ -55,43 +79,145 @@ const MUSCLE_LOOKUP = {
   "front raise":    ["Shoulders"],
   "upright row":    ["Shoulders", "Biceps"],
   "arnold":         ["Shoulders", "Triceps"],
+  "handstand":      ["Shoulders", "Core"],
+  "pike":           ["Shoulders", "Core"],
+  "external rotation": ["Shoulders"],
+  "internal rotation": ["Shoulders"],
+  "shoulder rotation": ["Shoulders"],
+  "band pull apart": ["Shoulders", "Back"],
+  // ── Biceps ─────────────────────────────────────────────────────────────────
   "bicep curl":     ["Biceps"],
   "biceps curl":    ["Biceps"],
   "hammer curl":    ["Biceps"],
+  "preacher curl":  ["Biceps"],
+  "concentration curl": ["Biceps"],
+  "cable curl":     ["Biceps"],
+  "reverse curl":   ["Biceps"],
   "curl":           ["Biceps"],
+  // ── Triceps ────────────────────────────────────────────────────────────────
   "tricep":         ["Triceps"],
   "skull crusher":  ["Triceps"],
   "kickback":       ["Triceps"],
-  "squat":          ["Quads", "Glutes"],
-  "lunge":          ["Quads", "Glutes"],
-  "leg press":      ["Quads", "Glutes"],
-  "leg extension":  ["Quads"],
-  "leg curl":       ["Hamstrings"],
-  "romanian deadlift": ["Hamstrings", "Glutes"],
-  "rdl":            ["Hamstrings", "Glutes"],
-  "glute bridge":   ["Glutes"],
-  "hip thrust":     ["Glutes"],
-  "calf raise":     ["Calves"],
-  "step-up":        ["Quads", "Glutes"],
-  "step up":        ["Quads", "Glutes"],
-  "box jump":       ["Quads", "Glutes"],
+  "tricep dip":     ["Triceps"],
+  "close grip":     ["Triceps", "Chest"],
+  "rope pushdown":  ["Triceps"],
+  "pushdown":       ["Triceps"],
+  "overhead extension": ["Triceps"],
+  // ── Core ───────────────────────────────────────────────────────────────────
   "plank":          ["Core"],
+  "side plank":     ["Core"],
   "crunch":         ["Core"],
   "sit-up":         ["Core"],
   "sit up":         ["Core"],
   "russian twist":  ["Core"],
   "leg raise":      ["Core"],
   "bicycle":        ["Core"],
+  "ab wheel":       ["Core"],
+  "hollow body":    ["Core"],
+  "v-up":           ["Core"],
+  "v up":           ["Core"],
+  "toe touch":      ["Core"],
+  "dead bug":       ["Core"],
+  "bird dog":       ["Core", "Back"],
+  "cat cow":        ["Core", "Back"],
+  "cat-cow":        ["Core", "Back"],
+  "flutter kick":   ["Core", "Cardio"],
+  "hanging leg":    ["Core"],
+  "cable crunch":   ["Core"],
+  "wood chop":      ["Core"],
+  "pallof press":   ["Core"],
+  "l-sit":          ["Core"],
+  "l sit":          ["Core"],
+  "ab rollout":     ["Core"],
+  "flutter":        ["Core"],
   "mountain climber":["Core", "Cardio"],
+  // ── Quads & Glutes ─────────────────────────────────────────────────────────
+  "squat":          ["Quads", "Glutes"],
+  "lunge":          ["Quads", "Glutes"],
+  "split squat":    ["Quads", "Glutes"],
+  "bulgarian":      ["Quads", "Glutes"],
+  "sumo squat":     ["Quads", "Glutes"],
+  "goblet squat":   ["Quads", "Glutes"],
+  "pistol squat":   ["Quads", "Glutes"],
+  "pistol":         ["Quads", "Glutes"],
+  "leg press":      ["Quads", "Glutes"],
+  "leg extension":  ["Quads"],
+  "wall sit":       ["Quads"],
+  "step-up":        ["Quads", "Glutes"],
+  "step up":        ["Quads", "Glutes"],
+  "box jump":       ["Quads", "Glutes"],
+  "box step":       ["Quads", "Glutes"],
+  "tuck jump":      ["Full Body"],
+  "broad jump":     ["Full Body"],
+  // ── Hamstrings ─────────────────────────────────────────────────────────────
+  "leg curl":       ["Hamstrings"],
+  "romanian deadlift": ["Hamstrings", "Glutes"],
+  "rdl":            ["Hamstrings", "Glutes"],
+  "hip hinge":      ["Hamstrings", "Glutes"],
+  // ── Glutes ─────────────────────────────────────────────────────────────────
+  "glute bridge":   ["Glutes"],
+  "hip thrust":     ["Glutes"],
+  "fire hydrant":   ["Glutes"],
+  "donkey kick":    ["Glutes"],
+  "clamshell":      ["Glutes"],
+  "hip circle":     ["Glutes", "Core"],
+  "hip raise":      ["Glutes", "Core"],
+  "bridge":         ["Glutes", "Core"],
+  "single leg":     ["Quads", "Glutes"],
+  // ── Calves ─────────────────────────────────────────────────────────────────
+  "calf raise":     ["Calves"],
+  "seated calf":    ["Calves"],
+  "standing calf":  ["Calves"],
+  // ── Yoga / Pilates / Mobility ───────────────────────────────────────────────
+  "warrior":        ["Quads", "Core"],
+  "downward dog":   ["Shoulders", "Core"],
+  "downward-facing dog": ["Shoulders", "Core"],
+  "cobra":          ["Back", "Core"],
+  "child's pose":   ["Back", "Core"],
+  "child pose":     ["Back", "Core"],
+  "pigeon":         ["Glutes"],
+  "tree pose":      ["Core", "Quads"],
+  "sun salutation": ["Full Body"],
+  "yoga flow":      ["Full Body"],
+  "pilates roll":   ["Core"],
+  "pilates hundred": ["Core"],
+  "reformer":       ["Core", "Full Body"],
+  "hip flexor stretch": ["Core"],
+  "hip flexor":     ["Core", "Quads"],
+  "foam roll":      ["Full Body"],
+  "mobility":       ["Full Body"],
+  "stretch":        ["Full Body"],
+  // ── Full Body / Cardio ─────────────────────────────────────────────────────
   "burpee":         ["Full Body"],
   "jumping jack":   ["Cardio"],
   "jump rope":      ["Cardio"],
   "running":        ["Cardio"],
   "cycling":        ["Cardio"],
   "swim":           ["Full Body"],
+  "freestyle":      ["Full Body"],
+  "backstroke":     ["Full Body"],
+  "breaststroke":   ["Full Body"],
+  "butterfly stroke": ["Full Body"],
   "clean":          ["Full Body"],
   "snatch":         ["Full Body"],
   "thruster":       ["Full Body"],
+  "kettlebell":     ["Full Body"],
+  "turkish get-up": ["Full Body"],
+  "turkish getup":  ["Full Body"],
+  "farmer":         ["Full Body"],
+  "sled push":      ["Full Body"],
+  "sled pull":      ["Full Body"],
+  "battle rope":    ["Full Body"],
+  "tire flip":      ["Full Body"],
+  "sprint":         ["Cardio"],
+  "jog":            ["Cardio"],
+  "stair":          ["Quads", "Cardio"],
+  "elliptical":     ["Cardio"],
+  "row machine":    ["Back", "Cardio"],
+  "rowing machine": ["Back", "Cardio"],
+  "jump squat":     ["Quads", "Glutes"],
+  "plyometric":     ["Full Body"],
+  "agility":        ["Cardio"],
 };
 
 const MUSCLE_COLORS = {
@@ -109,6 +235,76 @@ const MUSCLE_COLORS = {
   "Cardio":      "bg-pink-100 text-pink-700",
 };
 
+// Maps anatomical / verbose muscle names → standard group keys used in MUSCLE_COLORS.
+const MUSCLE_NORMALIZE = {
+  // Chest
+  "pectoralis major": "Chest", "pectoralis minor": "Chest",
+  "upper chest": "Chest",      "lower chest": "Chest",
+  "pec ":        "Chest",
+  // Shoulders
+  "anterior deltoid":  "Shoulders", "lateral deltoid":  "Shoulders",
+  "posterior deltoid": "Shoulders", "rear deltoid":     "Shoulders",
+  "deltoid":           "Shoulders", "front delt":       "Shoulders",
+  "side delt":         "Shoulders", "rear delt":        "Shoulders",
+  // Triceps
+  "triceps brachii": "Triceps", "triceps": "Triceps",
+  // Biceps
+  "biceps brachii": "Biceps", "brachialis": "Biceps", "brachioradialis": "Biceps",
+  "biceps": "Biceps",
+  // Back
+  "latissimus dorsi": "Back", "lats": "Back", "trapezius": "Back",
+  "traps": "Back",             "rhomboids": "Back",  "erector spinae": "Back",
+  "lower back": "Back",        "upper back": "Back",
+  // Core
+  "rectus abdominis": "Core", "obliques": "Core", "transverse abdominis": "Core",
+  "abdominals": "Core",        "abs": "Core",      "hip flexors": "Core",
+  // Quads
+  "quadriceps": "Quads", "rectus femoris": "Quads",
+  "vastus lateralis": "Quads", "vastus medialis": "Quads", "vastus": "Quads",
+  "quads": "Quads",
+  // Hamstrings
+  "hamstrings": "Hamstrings", "biceps femoris": "Hamstrings",
+  "semitendinosus": "Hamstrings", "semimembranosus": "Hamstrings",
+  // Glutes
+  "gluteus maximus": "Glutes", "gluteus medius": "Glutes",
+  "gluteus minimus": "Glutes", "gluteus": "Glutes", "glutes": "Glutes",
+  // Calves
+  "gastrocnemius": "Calves", "soleus": "Calves", "calves": "Calves",
+};
+
+// Word-stem → muscle group (last-resort fallback when MUSCLE_LOOKUP has no match).
+// Checks if any word in the exercise name starts with a stem listed here.
+const WORD_SCAN_MAP = {
+  chest:      "Chest",
+  pec:        "Chest",
+  back:       "Back",
+  lat:        "Back",
+  trap:       "Back",
+  lats:       "Back",
+  traps:      "Back",
+  shoulder:   "Shoulders",
+  delt:       "Shoulders",
+  rotator:    "Shoulders",
+  bicep:      "Biceps",
+  tricep:     "Triceps",
+  core:       "Core",
+  ab:         "Core",
+  abs:        "Core",
+  oblique:    "Core",
+  glute:      "Glutes",
+  glutes:     "Glutes",
+  hip:        "Glutes",
+  butt:       "Glutes",
+  quad:       "Quads",
+  quads:      "Quads",
+  thigh:      "Quads",
+  hamstring:  "Hamstrings",
+  calf:       "Calves",
+  calves:     "Calves",
+  cardio:     "Cardio",
+  sprint:     "Cardio",
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function capitalize(str) {
@@ -120,8 +316,33 @@ function getMuscleColor(muscle) {
   return MUSCLE_COLORS[muscle] || "bg-gray-100 text-gray-600";
 }
 
+// Converts a verbose / anatomical muscle name to a standard MUSCLE_COLORS key.
+// e.g. "upper chest (pectoralis major - clavicular head)" → "Chest"
+//      "Anterior Deltoid" → "Shoulders"
+//      "Chest" (already standard) → "Chest"
+function normalizeMuscle(name) {
+  if (!name) return name;
+  // Already a standard name?
+  if (MUSCLE_COLORS[name]) return name;
+  const lower = name.toLowerCase();
+  // Strip parenthetical annotation: "upper chest (pectoralis...)" → "upper chest"
+  const base = lower.replace(/\s*\(.*\)/, "").trim();
+  // Substring scan through normalize map (longest-key-first is not needed for these unique prefixes)
+  for (const [key, val] of Object.entries(MUSCLE_NORMALIZE)) {
+    if (base.includes(key) || lower.includes(key)) return val;
+  }
+  // Fallback: capitalize first letter
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+// Returns the MUSCLE_COLORS class string for any raw or normalized muscle name.
+function getMuscleColorByName(rawName) {
+  return getMuscleColor(normalizeMuscle(rawName));
+}
+
 // Returns { primary: string[], secondary: string[] } for an exercise.
-// Uses AI-supplied arrays if present, otherwise derives from name lookup.
+// Uses AI-supplied arrays if present, otherwise derives from name lookup,
+// and finally falls back to a word-stem scan of the exercise name.
 function getMusclesForExercise(ex) {
   if (ex.primary_muscles?.length) {
     return { primary: ex.primary_muscles, secondary: ex.secondary_muscles || [] };
@@ -132,6 +353,19 @@ function getMusclesForExercise(ex) {
       return { primary: muscles.slice(0, 2), secondary: muscles.slice(2) };
     }
   }
+  // Word-stem fallback: split exercise name into words and check each against WORD_SCAN_MAP.
+  const words = name.replace(/[^a-z\s-]/g, " ").split(/[\s-]+/).filter((w) => w.length >= 2);
+  const found = [];
+  for (const word of words) {
+    for (const [stem, group] of Object.entries(WORD_SCAN_MAP)) {
+      if ((word === stem || word.startsWith(stem)) && !found.includes(group)) {
+        found.push(group);
+      }
+    }
+  }
+  if (found.length > 0) {
+    return { primary: found.slice(0, 2), secondary: found.slice(2) };
+  }
   return { primary: [], secondary: [] };
 }
 
@@ -140,9 +374,8 @@ function getMuscleBreakdown(wp) {
   Object.values(wp || {}).forEach((day) => {
     if (!day) return;
     (day.exercises || []).forEach((ex) => {
-      getMusclesForExercise(ex).primary.forEach((m) => {
-        counts[m] = (counts[m] || 0) + 1;
-      });
+      const normalized = [...new Set(getMusclesForExercise(ex).primary.map(normalizeMuscle))];
+      normalized.forEach((m) => { counts[m] = (counts[m] || 0) + 1; });
     });
   });
   return counts;
@@ -170,24 +403,19 @@ function estExerciseCalories(sets, weightKg = 70) {
   return Math.round((sets || 3) * (weightKg || 70) * 0.025);
 }
 
-function getDayTitle(day, dayPlan) {
-  if (dayPlan?.title) return dayPlan.title;
-  return `${capitalize(day)} — ${dayPlan?.focus || "Workout"}`;
-}
-
 // ── DayTitleEditor ────────────────────────────────────────────────────────────
 
-function DayTitleEditor({ day, dayPlan, onSave }) {
-  const defaultTitle = getDayTitle(day, dayPlan);
+function DayTitleEditor({ dayPlan, onSave }) {
+  const focus = dayPlan?.focus || "";
   const [editing, setEditing] = useState(false);
-  const [val, setVal]         = useState(defaultTitle);
+  const [val, setVal]         = useState(focus);
 
-  useEffect(() => { setVal(getDayTitle(day, dayPlan)); }, [dayPlan?.title, dayPlan?.focus]);
+  useEffect(() => { setVal(dayPlan?.focus || ""); }, [dayPlan?.focus]);
 
   function commit() {
     setEditing(false);
-    const trimmed = val.trim() || defaultTitle;
-    if (trimmed !== getDayTitle(day, dayPlan)) onSave(trimmed);
+    const trimmed = val.trim();
+    if (trimmed !== (dayPlan?.focus || "")) onSave(trimmed);
   }
 
   if (editing) {
@@ -199,24 +427,27 @@ function DayTitleEditor({ day, dayPlan, onSave }) {
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === "Enter")  commit();
-          if (e.key === "Escape") { setEditing(false); setVal(getDayTitle(day, dayPlan)); }
+          if (e.key === "Escape") { setEditing(false); setVal(dayPlan?.focus || ""); }
         }}
-        className="text-xs font-bold bg-transparent border-b border-blue-400 focus:outline-none text-gray-900 w-full"
+        placeholder="Add focus..."
+        className="text-xs bg-transparent border-b border-blue-400 focus:outline-none text-gray-600 italic w-full"
       />
     );
   }
 
   return (
-    <div className="flex items-center gap-1 group/title min-w-0">
-      <span className="text-xs font-bold text-gray-900 leading-tight truncate">
-        {getDayTitle(day, dayPlan)}
-      </span>
+    <div className="flex items-start gap-1 group/title min-w-0">
+      {focus ? (
+        <span className="text-sm font-semibold text-gray-900 leading-snug line-clamp-3">{focus}</span>
+      ) : (
+        <span className="text-sm text-gray-300 italic leading-snug">Add focus...</span>
+      )}
       <button
         onClick={() => setEditing(true)}
-        className="text-gray-300 hover:text-gray-500 opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0 text-xs leading-none"
-        title="Edit title"
+        className="text-gray-300 hover:text-gray-500 opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0 mt-0.5"
+        title="Edit focus"
       >
-        ✏️
+        <SlidersHorizontal size={11} />
       </button>
     </div>
   );
@@ -225,37 +456,37 @@ function DayTitleEditor({ day, dayPlan, onSave }) {
 // ── ExerciseCard ──────────────────────────────────────────────────────────────
 // Simplified overview card — name, sets×reps pill, muscle tags, calorie estimate.
 
-function ExerciseCard({ exercise, weightKg, hoveredMuscle, onDoubleClick }) {
+function ExerciseCard({ exercise, weightKg, hoveredMuscle, onClick, unit }) {
   const { primary, secondary } = getMusclesForExercise(exercise);
-  const allMuscles  = [...primary, ...secondary];
-  const isHighlighted = hoveredMuscle && allMuscles.includes(hoveredMuscle);
-  const kcal = estExerciseCalories(exercise.sets, weightKg);
+  // Normalize muscles for display in the compact overview cards
+  const primaryNorm   = [...new Set(primary.map(normalizeMuscle))];
+  const secondaryNorm = [...new Set(secondary.map(normalizeMuscle).filter((m) => !primaryNorm.includes(m)))];
+  const allNorm = [...primaryNorm, ...secondaryNorm];
+  const isHighlighted = hoveredMuscle && allNorm.includes(hoveredMuscle);
+  const weightDisplay = exercise.weight != null
+    ? ` · ${unit === "imperial"
+        ? `${(exercise.weight * 2.20462).toFixed(1)} lbs`
+        : `${exercise.weight} kg`}`
+    : "";
 
   return (
     <div
-      onDoubleClick={onDoubleClick}
-      title="Double-click to edit"
-      className={`p-2 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-all select-none ${
+      onClick={onClick}
+      title="Click to edit"
+      className={`p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-all select-none overflow-hidden ${
         isHighlighted ? "ring-2 ring-blue-400 bg-blue-50" : ""
       }`}
     >
       <p className="font-semibold text-gray-800 text-xs leading-tight">{exercise.name}</p>
-      <div className="flex items-center flex-wrap gap-1 mt-1">
-        <span className="bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap">
-          {exercise.sets} × {exercise.reps}
-        </span>
-        {kcal && (
-          <span className="bg-gray-100 text-gray-400 text-xs px-1.5 py-0.5 rounded-full whitespace-nowrap">
-            ~{kcal} kcal
-          </span>
-        )}
-      </div>
-      {(primary.length > 0 || secondary.length > 0) && (
+      <p className="text-xs text-gray-500 mt-0.5">
+        {exercise.sets} × {exercise.reps}{weightDisplay}
+      </p>
+      {(primaryNorm.length > 0 || secondaryNorm.length > 0) && (
         <div className="flex flex-wrap gap-0.5 mt-1">
-          {primary.map((m) => (
+          {primaryNorm.map((m) => (
             <span key={m} className={`text-xs px-1.5 py-0.5 rounded-full ${getMuscleColor(m)}`}>{m}</span>
           ))}
-          {secondary.map((m) => (
+          {secondaryNorm.map((m) => (
             <span key={m} className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400">{m}</span>
           ))}
         </div>
@@ -270,12 +501,12 @@ function ExerciseCard({ exercise, weightKg, hoveredMuscle, onDoubleClick }) {
 function HoverGapAdd({ onClick }) {
   return (
     <div
-      className="group/gap flex items-center justify-center h-4 cursor-pointer"
+      className="group/gap flex items-center justify-center h-6 cursor-pointer"
       onClick={onClick}
     >
       <div className="h-px w-full bg-transparent group-hover/gap:bg-blue-200 transition-colors relative">
-        <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white text-blue-400 text-xs opacity-0 group-hover/gap:opacity-100 transition-opacity rounded-full px-1 border border-blue-200 hover:text-blue-600 hover:border-blue-400 leading-none py-0.5">
-          ➕
+        <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white text-blue-400 opacity-0 group-hover/gap:opacity-100 transition-opacity rounded-full p-0.5 border border-blue-200 hover:text-blue-600 hover:border-blue-400 flex items-center justify-center">
+          <Plus size={10} />
         </span>
       </div>
     </div>
@@ -290,6 +521,12 @@ function ExerciseDetailModal({ exercise, unit, weightKg, onSave, onRemove, onSwa
   const [reps,    setReps]    = useState(exercise.reps || "");
   const [weight,  setWeight]  = useState("");
   const [confirmRemove, setConfirmRemove] = useState(false);
+
+  // Lock page scroll while modal is open
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
 
   const { primary, secondary } = getMusclesForExercise({ ...exercise, name });
   const kcal = estExerciseCalories(parseInt(sets) || 3, weightKg);
@@ -326,7 +563,7 @@ function ExerciseDetailModal({ exercise, unit, weightKg, onSave, onRemove, onSwa
       <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl">
         <div className="flex items-center justify-between p-5 border-b">
           <h2 className="font-bold text-gray-900 text-lg">Exercise Details</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
 
         <div className="p-5 space-y-4">
@@ -355,7 +592,7 @@ function ExerciseDetailModal({ exercise, unit, weightKg, onSave, onRemove, onSwa
               <p className="text-xs font-medium text-gray-500 mb-1.5">Muscles Activated</p>
               <div className="flex flex-wrap gap-1.5">
                 {primary.map((m) => (
-                  <span key={m} className={`text-xs px-2.5 py-1 rounded-full font-medium ${getMuscleColor(m)}`}>{m}</span>
+                  <span key={m} className={`text-xs px-2.5 py-1 rounded-full font-medium ${getMuscleColorByName(m)}`}>{m}</span>
                 ))}
                 {secondary.map((m) => (
                   <span key={m} className="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-500">{m}</span>
@@ -397,9 +634,9 @@ function ExerciseDetailModal({ exercise, unit, weightKg, onSave, onRemove, onSwa
           <div className="flex gap-2 pt-1">
             <button
               onClick={onSwap}
-              className="flex-1 py-2 border border-blue-500 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors"
+              className="flex-1 py-2 border border-blue-500 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors flex items-center justify-center gap-1.5"
             >
-              🔄 Swap Exercise
+              <RefreshCw size={14} /> Swap Exercise
             </button>
             {confirmRemove ? (
               <button
@@ -411,9 +648,9 @@ function ExerciseDetailModal({ exercise, unit, weightKg, onSave, onRemove, onSwa
             ) : (
               <button
                 onClick={() => setConfirmRemove(true)}
-                className="py-2 px-3 border border-red-200 text-red-400 rounded-lg text-sm hover:bg-red-50 transition-colors"
+                className="py-2 px-3 border border-red-200 text-red-400 rounded-lg text-sm hover:bg-red-50 transition-colors flex items-center justify-center"
               >
-                🗑️
+                <Trash2 size={16} />
               </button>
             )}
           </div>
@@ -437,6 +674,11 @@ function RegenerateModal({ onClose, onGenerate, isGenerating }) {
   const [specific,       setSpecific]       = useState("");
   const [keepStructure,  setKeepStructure]  = useState(true);
 
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
@@ -445,7 +687,7 @@ function RegenerateModal({ onClose, onGenerate, isGenerating }) {
       <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
         <div className="flex items-center justify-between p-5 border-b">
           <h2 className="font-bold text-gray-900">Let's improve your plan</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
 
         <div className="p-5 space-y-4">
@@ -554,7 +796,7 @@ function SwapModal({ mode, exercise, workoutFocus, profileWeight, onClose, onSel
             </h2>
             <p className="text-xs text-gray-400 mt-0.5">{workoutFocus}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
 
         <div className="p-5 space-y-4">
@@ -662,7 +904,7 @@ function SwapMealModal({ mealType, mealData, profile, onClose, onSelect }) {
             <h2 className="font-bold text-gray-900">Swap {capitalize(mealType)}</h2>
             <p className="text-xs text-gray-400 mt-0.5">{mealData?.name}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
 
         <div className="p-5 space-y-4">
@@ -768,7 +1010,7 @@ function SaveMealModal({ mealType, mealData, onClose, onSave }) {
             <h2 className="font-bold text-gray-900">Save to My Meals</h2>
             <p className="text-xs text-gray-400 mt-0.5">{mealData?.name}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
 
         <div className="p-5 space-y-4">
@@ -802,7 +1044,7 @@ function SaveMealModal({ mealType, mealData, onClose, onSave }) {
 
           <button onClick={handleSave} disabled={saving}
             className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
-            {saving ? "Saving…" : "Save to My Meals 💾"}
+            {saving ? "Saving…" : <span className="flex items-center justify-center gap-1.5"><Bookmark size={14} /> Save to My Meals</span>}
           </button>
         </div>
       </div>
@@ -849,7 +1091,7 @@ function AddCustomMealModal({ mealType, onClose, onAdd }) {
       <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
         <div className="flex items-center justify-between p-5 border-b">
           <h2 className="font-bold text-gray-900">Add Custom {capitalize(mealType)}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
 
         <div className="p-5 space-y-3">
@@ -912,6 +1154,375 @@ function AddCustomMealModal({ mealType, onClose, onAdd }) {
   );
 }
 
+// ── DayExerciseRow ────────────────────────────────────────────────────────────
+// Exercise row used inside DayOverviewModal. Shows specific (raw) muscle names.
+
+function DayExerciseRow({ exercise, editing, onClick, onRemove, unit, dragHandleProps }) {
+  const { primary, secondary } = getMusclesForExercise(exercise);
+  const weightStr = exercise.weight != null
+    ? (unit === "imperial"
+        ? `${(exercise.weight * 2.20462).toFixed(1)} lbs`
+        : `${exercise.weight} kg`)
+    : null;
+
+  return (
+    <div
+      onClick={onClick}
+      className={`bg-white border border-gray-200 rounded-xl p-3 transition-colors ${
+        editing ? "cursor-default" : "cursor-pointer hover:bg-gray-50"
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        {editing && (
+          <span
+            {...(dragHandleProps || {})}
+            className="text-gray-300 hover:text-gray-500 cursor-grab mt-0.5 shrink-0 select-none"
+          >
+            <GripVertical size={14} />
+          </span>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <p className="font-semibold text-gray-900 text-sm leading-snug">{exercise.name}</p>
+            <div className="text-right shrink-0">
+              <p className="font-semibold text-gray-900 text-sm leading-none">
+                {exercise.sets}×{exercise.reps}
+              </p>
+              {weightStr && (
+                <p className="text-sm font-semibold text-gray-700 mt-0.5">{weightStr}</p>
+              )}
+            </div>
+          </div>
+          {(primary.length > 0 || secondary.length > 0) && (
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {primary.map((m) => {
+                const norm = normalizeMuscle(m);
+                return (
+                  <span key={m} className={`text-xs px-2 py-0.5 rounded-full font-medium ${getMuscleColor(norm)}`}>{norm}</span>
+                );
+              })}
+              {secondary.map((m) => {
+                const norm = normalizeMuscle(m);
+                return (
+                  <span key={m} className={`text-xs px-2 py-0.5 rounded-full ${getMuscleColor(norm)} opacity-70`}>{norm}</span>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        {editing && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            className="text-red-300 hover:text-red-500 transition-colors mt-0.5 shrink-0"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── ModalGapAdd ───────────────────────────────────────────────────────────────
+// Thin gap between exercises in edit mode that reveals a + button on hover.
+
+function ModalGapAdd({ onClick }) {
+  return (
+    <div className="group/mgap flex items-center justify-center h-5 cursor-pointer" onClick={onClick}>
+      <div className="h-px w-full bg-transparent group-hover/mgap:bg-blue-200 transition-colors relative">
+        <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white text-blue-400 opacity-0 group-hover/mgap:opacity-100 transition-opacity rounded-full p-0.5 border border-blue-200 flex items-center justify-center">
+          <Plus size={10} />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── DayOverviewModal ──────────────────────────────────────────────────────────
+// Opens when the user clicks a day card. Shows day stats, muscle groups, and
+// an exercise list. Supports staged edit mode with DnD reordering + gap-insert.
+
+function DayOverviewModal({
+  day, dayPlan, unit, weightKg,
+  onClose, onSaveChanges, onOpenExerciseDetail,
+  onRegenerateDay,
+  showToast,
+}) {
+  const [editing,           setEditing]           = useState(false);
+  const [stagedExercises,   setStagedExercises]   = useState([]);
+  const [stagedFocus,       setStagedFocus]       = useState("");
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [localSwapModal,    setLocalSwapModal]    = useState(null); // { insertIdx }
+
+  // Lock page scroll while modal is open
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  function enterEditMode() {
+    setStagedExercises([...(dayPlan?.exercises || [])]);
+    setStagedFocus(dayPlan?.focus || "");
+    setEditing(true);
+  }
+
+  function handleDone() {
+    onSaveChanges(stagedExercises, stagedFocus.trim() || dayPlan?.focus || "");
+    setEditing(false);
+  }
+
+  function handleAttemptClose() {
+    if (editing) {
+      setShowUnsavedDialog(true);
+    } else {
+      onClose();
+    }
+  }
+
+  function handleSaveAndClose() {
+    onSaveChanges(stagedExercises, stagedFocus.trim() || dayPlan?.focus || "");
+    setEditing(false);
+    setShowUnsavedDialog(false);
+    onClose();
+  }
+
+  function handleDiscardAndClose() {
+    setEditing(false);
+    setShowUnsavedDialog(false);
+    onClose();
+  }
+
+  function handleModalDragEnd({ source, destination }) {
+    if (!destination || source.index === destination.index) return;
+    const list = [...stagedExercises];
+    const [moved] = list.splice(source.index, 1);
+    list.splice(destination.index, 0, moved);
+    setStagedExercises(list);
+  }
+
+  // Derived stats (always from dayPlan, not staged)
+  const exercises    = dayPlan?.exercises || [];
+  const duration     = dayPlan?.duration_minutes;
+  const metVal       = getMet(dayPlan?.focus);
+  const intensity    = metVal >= 8 ? "High" : metVal >= 5 ? "Moderate" : "Light";
+
+  // Unique normalized muscle groups across all exercises (view mode only)
+  const normalizedGroups = [...new Set(
+    exercises.flatMap((ex) => getMusclesForExercise(ex).primary.map(normalizeMuscle))
+  )];
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) handleAttemptClose(); }}
+    >
+      <div className="relative bg-white rounded-2xl w-full max-w-sm max-h-[88vh] flex flex-col shadow-xl">
+
+        {/* ── Header ── */}
+        <div className="px-5 pt-5 pb-4">
+          {/* Day label + buttons row */}
+          <div className="flex items-start justify-between mb-2">
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest pt-1">
+              {DAY_LABELS_FULL[day]}
+            </span>
+            <div className="flex items-center gap-2">
+              {editing ? (
+                <button
+                  onClick={handleDone}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border-2 border-blue-500 text-blue-600 rounded-full text-sm font-medium hover:bg-blue-50 transition-colors"
+                >
+                  <Check size={14} /> Done
+                </button>
+              ) : (
+                <button
+                  onClick={enterEditMode}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-500 rounded-full text-sm font-medium hover:bg-gray-50 transition-colors"
+                >
+                  <Pencil size={14} /> Edit
+                </button>
+              )}
+              <button
+                onClick={handleAttemptClose}
+                className="w-8 h-8 flex items-center justify-center border border-gray-200 rounded-full text-gray-400 hover:bg-gray-50 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Workout title */}
+          {editing ? (
+            <input
+              autoFocus
+              value={stagedFocus}
+              onChange={(e) => setStagedFocus(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleDone();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              className="text-2xl font-bold text-gray-900 w-full border-b-2 border-blue-400 focus:outline-none bg-transparent pb-0.5 mb-3"
+            />
+          ) : (
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">{dayPlan?.focus || "Workout"}</h2>
+          )}
+
+          {/* Stats row */}
+          <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-sm">
+            {duration && (
+              <span className="flex items-center gap-1 text-blue-600">
+                <Clock size={14} /> {duration} min
+              </span>
+            )}
+            <span className="flex items-center gap-1 text-blue-600">
+              <Dumbbell size={14} /> {exercises.length} exercises
+            </span>
+            <span className="flex items-center gap-1 text-orange-500">
+              <Zap size={14} /> {intensity}
+            </span>
+          </div>
+        </div>
+
+        <hr className="border-gray-100" />
+
+        {/* ── Scrollable body ── */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+
+          {/* Muscle Groups (view mode only) */}
+          {!editing && normalizedGroups.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                Muscle Groups
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {normalizedGroups.map((m) => (
+                  <span key={m} className={`px-3 py-1 rounded-full text-sm font-medium ${getMuscleColor(m)}`}>
+                    {m}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Exercise list */}
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
+              Exercises
+            </p>
+            <DragDropContext onDragEnd={handleModalDragEnd}>
+              <Droppable droppableId="modal-exercises" isDropDisabled={!editing}>
+                {(droppableProvided) => (
+                  <div
+                    ref={droppableProvided.innerRef}
+                    {...droppableProvided.droppableProps}
+                    className="space-y-2"
+                  >
+                    {editing && <ModalGapAdd onClick={() => setLocalSwapModal({ insertIdx: 0 })} />}
+
+                    {(editing ? stagedExercises : exercises).map((ex, idx) => (
+                      <React.Fragment key={`modal-ex-group-${idx}`}>
+                        {editing ? (
+                          <Draggable draggableId={`modal-ex-${idx}`} index={idx}>
+                            {(dragProvided) => (
+                              <div ref={dragProvided.innerRef} {...dragProvided.draggableProps}>
+                                <DayExerciseRow
+                                  exercise={ex}
+                                  editing={true}
+                                  dragHandleProps={dragProvided.dragHandleProps}
+                                  onClick={undefined}
+                                  onRemove={() => setStagedExercises((prev) => prev.filter((_, i) => i !== idx))}
+                                  unit={unit}
+                                />
+                              </div>
+                            )}
+                          </Draggable>
+                        ) : (
+                          <DayExerciseRow
+                            exercise={ex}
+                            editing={false}
+                            onClick={() => onOpenExerciseDetail(ex, idx)}
+                            onRemove={undefined}
+                            unit={unit}
+                          />
+                        )}
+                        {editing && <ModalGapAdd onClick={() => setLocalSwapModal({ insertIdx: idx + 1 })} />}
+                      </React.Fragment>
+                    ))}
+
+                    {droppableProvided.placeholder}
+                  </div>
+                )}
+              </Droppable>
+            </DragDropContext>
+          </div>
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="p-4 border-t border-gray-100 flex gap-3">
+          <button
+            onClick={() => showToast("Workout logging coming soon!", "info")}
+            className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors text-sm"
+          >
+            Log This Workout
+          </button>
+          <button
+            onClick={onRegenerateDay}
+            className="px-4 py-3 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors whitespace-nowrap"
+          >
+            Regenerate Day
+          </button>
+        </div>
+
+        {/* ── Local SwapModal for gap-insert ── */}
+        {localSwapModal && (
+          <SwapModal
+            mode="add"
+            exercise={null}
+            workoutFocus={stagedFocus || dayPlan?.focus}
+            profileWeight={weightKg}
+            onClose={() => setLocalSwapModal(null)}
+            onSelect={(newEx) => {
+              const list = [...stagedExercises];
+              list.splice(localSwapModal.insertIdx, 0, newEx);
+              setStagedExercises(list);
+              setLocalSwapModal(null);
+            }}
+          />
+        )}
+
+        {/* ── Unsaved changes dialog ── */}
+        {showUnsavedDialog && (
+          <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-10 rounded-2xl">
+            <div className="bg-white rounded-xl p-5 mx-4 shadow-lg w-full max-w-xs">
+              <h3 className="font-semibold text-gray-900 mb-1">Save changes?</h3>
+              <p className="text-sm text-gray-500 mb-4">You have unsaved edits.</p>
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={handleSaveAndClose}
+                  className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold"
+                >
+                  Save changes
+                </button>
+                <button
+                  onClick={handleDiscardAndClose}
+                  className="w-full py-2 border border-gray-200 text-gray-600 rounded-lg text-sm font-medium"
+                >
+                  Discard changes
+                </button>
+                <button
+                  onClick={() => setShowUnsavedDialog(false)}
+                  className="w-full py-2 text-gray-400 text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── MuscleBreakdown ───────────────────────────────────────────────────────────
 
 function MuscleBreakdown({ workoutPlan, hoveredMuscle, onMuscleHover }) {
@@ -926,7 +1537,7 @@ function MuscleBreakdown({ workoutPlan, hoveredMuscle, onMuscleHover }) {
         className="flex items-center gap-2 text-lg font-semibold text-gray-800 mb-3"
       >
         Muscle Group Breakdown
-        <span className="text-sm text-gray-400">{open ? "▲" : "▼"}</span>
+        <span className="text-gray-400">{open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
       </button>
 
       {open && (
@@ -970,6 +1581,7 @@ export default function Plan() {
   const [savingStatus,    setSavingStatus]    = useState("idle"); // "idle"|"saving"|"saved"
   const [swapModal,       setSwapModal]       = useState(null);
   const [exerciseModal,   setExerciseModal]   = useState(null); // { day, idx, exercise }
+  const [dayOverviewModal,setDayOverviewModal]= useState(null); // day string
   const [mealModal,       setMealModal]       = useState(null); // { type, mealType, mealData }
   const [showRegenModal,  setShowRegenModal]  = useState(false);
   const [hoveredMuscle,   setHoveredMuscle]   = useState(null);
@@ -1099,8 +1711,8 @@ export default function Plan() {
     setSwapModal(null);
   }
 
-  function updateDayTitle(day, title) {
-    const newWP = { ...workoutPlan, [day]: { ...workoutPlan[day], title } };
+  function updateDayFocus(day, focus) {
+    const newWP = { ...workoutPlan, [day]: { ...workoutPlan[day], focus } };
     setWorkoutPlan(newWP);
     scheduleAutoSave(newWP);
   }
@@ -1114,23 +1726,11 @@ export default function Plan() {
   }
 
   // ── Drag and drop ─────────────────────────────────────────────────────────
-  // Two levels: day-swap (type="DAY") and exercise reorder (type="EXERCISE").
+  // Day-swap only (type="DAY"). Exercise reordering is done inside DayOverviewModal.
 
   function handleDragEnd({ source, destination }) {
     if (!destination) return;
     if (source.droppableId === destination.droppableId && source.index === destination.index) return;
-
-    // Exercise reorder within a day (droppableId = "ex-monday")
-    if (source.droppableId.startsWith("ex-")) {
-      const day = source.droppableId.slice(3);
-      const exercises = [...(workoutPlan[day]?.exercises || [])];
-      const [moved] = exercises.splice(source.index, 1);
-      exercises.splice(destination.index, 0, moved);
-      const newWP = { ...workoutPlan, [day]: { ...workoutPlan[day], exercises } };
-      setWorkoutPlan(newWP);
-      scheduleAutoSave(newWP);
-      return;
-    }
 
     // Day swap — source and destination are day column droppableIds
     if (source.droppableId === destination.droppableId) return;
@@ -1183,7 +1783,7 @@ export default function Plan() {
               Saving…
             </span>
           )}
-          {savingStatus === "saved" && <span className="text-xs text-green-500">✓ Saved</span>}
+          {savingStatus === "saved" && <span className="text-xs text-green-500 flex items-center gap-0.5"><Check size={12} /> Saved</span>}
         </div>
         <button
           onClick={() => plan ? setShowRegenModal(true) : handleGenerate()}
@@ -1206,7 +1806,7 @@ export default function Plan() {
       {!isLoading && !plan && !isGenerating && (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <p className="text-gray-500 mb-2 font-medium">
-            No plan yet — click Generate My Plan to get started 🚀
+            No plan yet — click Generate My Plan to get started
           </p>
         </div>
       )}
@@ -1218,7 +1818,7 @@ export default function Plan() {
           <section>
             <h2 className="text-lg font-semibold text-gray-800 mb-1">Workout Plan</h2>
             <p className="text-xs text-gray-400 mb-4">
-              Drag ⠿ to swap days · Drag exercise cards to reorder · Double-click any exercise to edit
+              Drag <GripVertical size={12} className="inline" /> to swap days · Click any exercise to edit · Click a day to view details
             </p>
 
             <DragDropContext onDragEnd={handleDragEnd}>
@@ -1233,7 +1833,7 @@ export default function Plan() {
                         <div
                           ref={provided.innerRef}
                           {...provided.droppableProps}
-                          className={`shrink-0 w-44 rounded-xl border flex flex-col transition-colors ${
+                          className={`shrink-0 w-52 rounded-xl border flex flex-col transition-colors ${
                             snapshot.isDraggingOver
                               ? "border-blue-400 bg-blue-50"
                               : "border-gray-200 bg-white"
@@ -1249,24 +1849,24 @@ export default function Plan() {
                                 <div
                                   ref={dragProvided.innerRef}
                                   {...dragProvided.draggableProps}
-                                  className={`flex-1 flex flex-col px-2 pb-3 ${
+                                  className={`flex-1 flex flex-col px-2 pb-3 cursor-pointer ${
                                     dragSnapshot.isDragging ? "opacity-80" : ""
                                   }`}
+                                  onClick={() => setDayOverviewModal(day)}
                                 >
-                                  {/* Day header: drag handle + editable title */}
-                                  <div className="flex items-center gap-1 mb-1 px-1">
+                                  {/* Day header: plain bold title left, drag handle right */}
+                                  <div className="flex items-center justify-between mb-1 px-1">
+                                    <span className="text-sm font-semibold text-gray-900 leading-snug flex-1 mr-1">
+                                      {dayPlan.focus || "Workout"}
+                                    </span>
                                     <span
                                       {...dragProvided.dragHandleProps}
-                                      className="text-gray-300 text-base select-none cursor-grab active:cursor-grabbing shrink-0"
+                                      className="text-gray-300 hover:text-gray-500 select-none cursor-grab active:cursor-grabbing shrink-0"
                                       title="Drag to move this workout to another day"
+                                      onClick={(e) => e.stopPropagation()}
                                     >
-                                      ⠿
+                                      <GripVertical size={14} />
                                     </span>
-                                    <DayTitleEditor
-                                      day={day}
-                                      dayPlan={dayPlan}
-                                      onSave={(title) => updateDayTitle(day, title)}
-                                    />
                                   </div>
 
                                   <p className="text-xs text-blue-600 mb-2 px-1">
@@ -1274,62 +1874,32 @@ export default function Plan() {
                                     {kcal ? ` · ~${kcal} kcal` : ""}
                                   </p>
 
-                                  {/* Exercise list — inner droppable for reordering */}
-                                  <Droppable droppableId={`ex-${day}`} type="EXERCISE">
-                                    {(exProvided, exSnapshot) => (
+                                  {/* Exercise list — static, no per-exercise DnD in overview */}
+                                  <div className="flex-1">
+                                    {(dayPlan.exercises || []).map((ex, idx) => (
                                       <div
-                                        ref={exProvided.innerRef}
-                                        {...exProvided.droppableProps}
-                                        className={`flex-1 rounded-lg transition-colors ${
-                                          exSnapshot.isDraggingOver ? "bg-blue-50" : ""
-                                        }`}
+                                        key={`${day}-ex-${idx}`}
+                                        className="mb-2"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setExerciseModal({ day, idx, exercise: ex });
+                                        }}
                                       >
-                                        {/* Hover-reveal ➕ before first exercise */}
-                                        <HoverGapAdd onClick={() => openAddExercise(day, -1, dayPlan.focus)} />
-
-                                        {(dayPlan.exercises || []).map((ex, idx) => (
-                                          <Draggable
-                                            key={`${day}-ex-${idx}`}
-                                            draggableId={`${day}-ex-${idx}`}
-                                            index={idx}
-                                          >
-                                            {(exDrag, exDragSnap) => (
-                                              <div
-                                                ref={exDrag.innerRef}
-                                                {...exDrag.draggableProps}
-                                                {...exDrag.dragHandleProps}
-                                                className={`mb-0.5 ${exDragSnap.isDragging ? "opacity-80 rotate-1" : ""}`}
-                                              >
-                                                <ExerciseCard
-                                                  exercise={ex}
-                                                  weightKg={profileWeight}
-                                                  hoveredMuscle={hoveredMuscle}
-                                                  onDoubleClick={() =>
-                                                    setExerciseModal({ day, idx, exercise: ex })
-                                                  }
-                                                />
-                                              </div>
-                                            )}
-                                          </Draggable>
-                                        ))}
-
-                                        {exProvided.placeholder}
-
-                                        {/* Hover-reveal ➕ after last exercise */}
-                                        <HoverGapAdd
-                                          onClick={() =>
-                                            openAddExercise(day, (dayPlan.exercises || []).length - 1, dayPlan.focus)
-                                          }
+                                        <ExerciseCard
+                                          exercise={ex}
+                                          weightKg={profileWeight}
+                                          hoveredMuscle={hoveredMuscle}
+                                          unit={unit}
                                         />
                                       </div>
-                                    )}
-                                  </Droppable>
+                                    ))}
+                                  </div>
                                 </div>
                               )}
                             </Draggable>
                           ) : (
-                            <div className="flex-1 min-h-[80px] flex items-center justify-center text-gray-300 text-sm pb-3">
-                              Rest Day 😴
+                            <div className="flex-1 min-h-[80px] flex items-center justify-center gap-1.5 text-gray-300 text-sm pb-3">
+                              <Moon size={16} /> Rest Day
                             </div>
                           )}
 
@@ -1400,13 +1970,13 @@ export default function Plan() {
                               onClick={() => setMealModal({ type: "swap", mealType: meal, mealData })}
                               className="flex-1 flex items-center justify-center gap-1 py-1.5 border border-gray-300 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
                             >
-                              🔄 Swap
+                              <RefreshCw size={12} /> Swap
                             </button>
                             <button
                               onClick={() => setMealModal({ type: "save", mealType: meal, mealData })}
                               className="flex-1 flex items-center justify-center gap-1 py-1.5 border border-gray-300 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
                             >
-                              💾 Save
+                              <Bookmark size={12} /> Save
                             </button>
                           </div>
                         </>
@@ -1448,7 +2018,39 @@ export default function Plan() {
         />
       )}
 
-      {/* ── Exercise Detail Modal (double-click) ── */}
+      {/* ── Day Overview Modal ── */}
+      {dayOverviewModal && workoutPlan?.[dayOverviewModal] && (
+        <DayOverviewModal
+          day={dayOverviewModal}
+          dayPlan={workoutPlan[dayOverviewModal]}
+          unit={unit}
+          weightKg={profileWeight}
+          onClose={() => setDayOverviewModal(null)}
+          onSaveChanges={(exercises, focus) => {
+            const newWP = {
+              ...workoutPlan,
+              [dayOverviewModal]: {
+                ...workoutPlan[dayOverviewModal],
+                exercises,
+                focus,
+              },
+            };
+            setWorkoutPlan(newWP);
+            scheduleAutoSave(newWP);
+          }}
+          onOpenExerciseDetail={(exercise, idx) => {
+            setDayOverviewModal(null);
+            setExerciseModal({ day: dayOverviewModal, idx, exercise });
+          }}
+          onRegenerateDay={() => {
+            setDayOverviewModal(null);
+            setShowRegenModal(true);
+          }}
+          showToast={showToast}
+        />
+      )}
+
+      {/* ── Exercise Detail Modal ── */}
       {exerciseModal && (
         <ExerciseDetailModal
           exercise={exerciseModal.exercise}

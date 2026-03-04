@@ -41,7 +41,7 @@ async function generateWeeklyPlan(profile, feedback = null) {
     ? profile.dietary_restrictions.join(", ")
     : "None";
 
-  const prompt = `You are an expert personal trainer and nutritionist. Create a detailed, personalized weekly plan for this user:
+  let prompt = `You are an expert personal trainer and nutritionist. Create a detailed, personalized weekly plan for this user:
 
 Body & Fitness:
 - Age: ${profile.age}, Weight: ${profile.weight_kg}kg, Height: ${profile.height_cm}cm
@@ -59,14 +59,16 @@ Diet:
 - Dietary restrictions: ${dietaryRestrictionsStr}
 - Dietary notes: ${profile.dietary_notes || "None"}
 
+For each exercise, primary_muscles should list 1-3 major muscle groups targeted (e.g. "Chest", "Shoulders", "Quads"). secondary_muscles should list 0-2 stabilizing muscles (e.g. "Triceps", "Core"). Use short, common muscle group names.
+
 Return ONLY a valid JSON object with NO extra text, markdown, or backticks. Use this exact structure:
 {
   "workoutPlan": {
-    "monday": { "focus": "string", "exercises": [{"name": "string", "sets": 0, "reps": "string", "notes": "string"}], "duration_minutes": 0 },
+    "monday": { "focus": "string", "exercises": [{"name": "string", "sets": 0, "reps": "string", "notes": "string", "primary_muscles": ["string"], "secondary_muscles": ["string"]}], "duration_minutes": 0 },
     "tuesday": null,
-    "wednesday": { "focus": "string", "exercises": [{"name": "string", "sets": 0, "reps": "string", "notes": "string"}], "duration_minutes": 0 },
+    "wednesday": { "focus": "string", "exercises": [{"name": "string", "sets": 0, "reps": "string", "notes": "string", "primary_muscles": ["string"], "secondary_muscles": ["string"]}], "duration_minutes": 0 },
     "thursday": null,
-    "friday": { "focus": "string", "exercises": [{"name": "string", "sets": 0, "reps": "string", "notes": "string"}], "duration_minutes": 0 },
+    "friday": { "focus": "string", "exercises": [{"name": "string", "sets": 0, "reps": "string", "notes": "string", "primary_muscles": ["string"], "secondary_muscles": ["string"]}], "duration_minutes": 0 },
     "saturday": null,
     "sunday": null
   },
@@ -92,14 +94,16 @@ Set non-workout days to null. Distribute workout days based on workout_days_per_
   }
 
   try {
+    console.log("[ai.service] generateWeeklyPlan: calling Gemini, feedback =", feedback ? "provided" : "none");
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(prompt);
-    const plan = JSON.parse(extractJson(result.response.text()));
+    const raw = result.response.text();
+    console.log("[ai.service] generateWeeklyPlan: response received, parsing JSON...");
+    const plan = JSON.parse(extractJson(raw));
+    console.log("[ai.service] generateWeeklyPlan: success");
     return plan;
   } catch (err) {
-    if (err instanceof SyntaxError) {
-      throw new Error("AI service temporarily unavailable. Please try again.");
-    }
+    console.error("[ai.service] generateWeeklyPlan error:", err.message);
     throw new Error("AI service temporarily unavailable. Please try again.");
   }
 }
@@ -171,11 +175,16 @@ Return ONLY a valid JSON array with exactly 3 objects. No markdown, no extra tex
 ]`;
 
   try {
+    console.log("[ai.service] suggestExerciseAlternatives: calling Gemini...");
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent(prompt);
-    const parsed = JSON.parse(extractJson(result.response.text()));
+    const raw = result.response.text();
+    console.log("[ai.service] suggestExerciseAlternatives: parsing response...");
+    const parsed = JSON.parse(extractJson(raw));
+    console.log("[ai.service] suggestExerciseAlternatives: success,", parsed.length, "alternatives");
     return Array.isArray(parsed) ? parsed.slice(0, 3) : [];
-  } catch {
+  } catch (err) {
+    console.error("[ai.service] suggestExerciseAlternatives error:", err.message);
     throw new Error("AI service temporarily unavailable. Please try again.");
   }
 }

@@ -8,6 +8,12 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { getDashboardData } from "../api/dashboard";
+import { getProfile } from "../api/profile";
+
+function toDisplayWeight(kg, unitPref) {
+  if (kg == null) return null;
+  return unitPref === "imperial" ? +(kg * 2.20462).toFixed(1) : +kg.toFixed(1);
+}
 
 // Format "2024-02-23" → "Feb 23" without timezone issues.
 function formatDate(dateStr) {
@@ -43,10 +49,14 @@ function ChartCard({ title, children }) {
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [unit, setUnit] = useState("metric");
 
   useEffect(() => {
-    getDashboardData()
-      .then(setData)
+    Promise.all([getDashboardData(), getProfile().catch(() => null)])
+      .then(([dashData, profile]) => {
+        setData(dashData);
+        if (profile?.unit_preference) setUnit(profile.unit_preference);
+      })
       .catch(() => setData(null))
       .finally(() => setIsLoading(false));
   }, []);
@@ -78,6 +88,8 @@ export default function Dashboard() {
     weeklyPlanTotal = 0,
   } = data ?? {};
 
+  const weightUnit = unit === "imperial" ? "lbs" : "kg";
+
   const hasAnyData =
     weightHistory.length > 0 || calorieHistory.length > 0 || workoutsThisWeek > 0;
 
@@ -100,7 +112,7 @@ export default function Dashboard() {
     },
     {
       label: "Current Weight",
-      value: currentWeight != null ? `${currentWeight} kg` : "--",
+      value: currentWeight != null ? `${toDisplayWeight(currentWeight, unit)} ${weightUnit}` : "--",
     },
     {
       label: "Day Streak",
@@ -111,7 +123,7 @@ export default function Dashboard() {
   // ── Prepare chart data with formatted labels ──────────────────────────────
   const weightChartData = weightHistory.map((d) => ({
     date: formatDate(d.date),
-    weight_kg: d.weight_kg,
+    weight: toDisplayWeight(d.weight_kg, unit),
   }));
 
   const calorieChartData = calorieHistory.map((d) => ({
@@ -119,7 +131,7 @@ export default function Dashboard() {
     calories: d.calories,
   }));
 
-  const weightValues = weightHistory.map((d) => d.weight_kg);
+  const weightValues = weightHistory.map((d) => toDisplayWeight(d.weight_kg, unit));
   const weightDomain = weightValues.length > 0
     ? [Math.floor(Math.min(...weightValues)) - 1, Math.ceil(Math.max(...weightValues)) + 1]
     : ["auto", "auto"];
@@ -158,7 +170,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
           {/* Weight Trend */}
-          <ChartCard title="Weight Trend — past 14 days (kg)">
+          <ChartCard title={`Weight Trend — past 14 days (${weightUnit})`}>
             {weightChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={weightChartData}>
@@ -168,8 +180,8 @@ export default function Dashboard() {
                   <Tooltip />
                   <Line
                     type="monotone"
-                    dataKey="weight_kg"
-                    name="Weight (kg)"
+                    dataKey="weight"
+                    name={`Weight (${weightUnit})`}
                     stroke="#2563eb"
                     strokeWidth={2}
                     dot={{ r: 3 }}

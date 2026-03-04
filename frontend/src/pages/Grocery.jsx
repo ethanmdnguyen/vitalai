@@ -32,6 +32,14 @@ function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+function titleCase(str) {
+  if (!str) return "";
+  return str
+    .split(" ")
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+    .join(" ");
+}
+
 // ── CategorySection ───────────────────────────────────────────────────────────
 
 function CategorySection({ category, items, onToggle }) {
@@ -62,10 +70,10 @@ function CategorySection({ category, items, onToggle }) {
                 item.checked ? "line-through text-gray-300" : "text-gray-800"
               }`}
             >
-              {item.ingredient}
+              {titleCase(item.ingredient)}
             </span>
             <span className="text-xs text-gray-400 shrink-0">
-              {item.meal_name}{item.meal_type ? ` · ${capitalize(item.meal_type)}` : ""}
+              {titleCase(item.meal_name)}{item.meal_type ? ` · ${capitalize(item.meal_type)}` : ""}
             </span>
           </label>
         ))}
