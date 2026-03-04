@@ -21,8 +21,9 @@ const NAV_LINKS = [
   { to: "/plan",      label: "My Plan"     },
   { to: "/grocery",   label: "🛒 Grocery"  },
   { to: "/log",       label: "Log Today"   },
-  { to: "/progress",  label: "Progress"    },
-  { to: "/settings",  label: "⚙️ Settings" },
+  { to: "/progress",   label: "Progress"         },
+  { to: "/bad-habits", label: "😈 I've Been Bad" },
+  { to: "/settings",   label: "⚙️ Settings"      },
 ];
 
 export default function Layout({ children }) {

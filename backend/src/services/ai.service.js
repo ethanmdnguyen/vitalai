@@ -244,10 +244,80 @@ ${ingredientList}`;
   }
 }
 
+async function analyzeHabits(habits, profile, todayLog) {
+  const habitLines = [];
+
+  if (habits.alcohol?.enabled) {
+    const { drinks = 0, type = "", hoursAgo = "" } = habits.alcohol;
+    habitLines.push(`- Alcohol: ${drinks} drink(s)${type ? ` (${type})` : ""}${hoursAgo ? `, consumed ${hoursAgo} hours ago` : ""}`);
+  }
+  if (habits.sleep?.enabled) {
+    const { hours = "" } = habits.sleep;
+    habitLines.push(`- Sleep: ${hours} hours`);
+  }
+  if (habits.smoking?.enabled) {
+    const { count = 0, method = "cigarettes" } = habits.smoking;
+    habitLines.push(`- Smoking/Nicotine: ${count} ${method}`);
+  }
+  if (habits.cannabis?.enabled) {
+    const { sessions = 0, method = "" } = habits.cannabis;
+    habitLines.push(`- Cannabis: ${sessions} session(s)${method ? ` (${method})` : ""}`);
+  }
+  if (habits.substances?.enabled) {
+    habitLines.push(`- Other substances: ${habits.substances.description || "unspecified"}`);
+  }
+  if (habits.junkFood?.enabled) {
+    const { description = "", calories = "" } = habits.junkFood;
+    habitLines.push(`- Junk food binge: ${description}${calories ? ` (~${calories} kcal)` : ""}`);
+  }
+  if (habits.medication?.enabled) {
+    habitLines.push(`- Skipped medication: ${habits.medication.description || "yes"}`);
+  }
+
+  const profileSummary = profile
+    ? `Age: ${profile.age ?? "?"}, Goal: ${profile.primary_goal || profile.goal || "general fitness"}, Fitness level: ${profile.fitness_level || "not specified"}`
+    : "Profile not available";
+
+  const workoutNote = todayLog?.workout_completed
+    ? "User has a workout scheduled today."
+    : "No workout scheduled for today.";
+
+  const prompt = `You are a compassionate, non-judgmental health coach. A user has confessed to some unhealthy behaviors and needs honest, supportive feedback — not shaming.
+
+User profile: ${profileSummary}
+${workoutNote}
+
+What they did last night / today:
+${habitLines.join("\n") || "- No specific habits reported"}
+
+Respond with exactly these 4 sections. Use ONLY plain text — no markdown, no bold, no asterisks, no bullet symbols. Use the exact section headers shown (all caps, followed by a colon):
+
+BODY: Explain in 2-3 sentences what these substances/behaviors actually do to the body physiologically. Be educational and specific, not preachy.
+
+GOALS: In 2 sentences, honestly assess how this affects their specific fitness goals. Be direct but kind.
+
+RECOVERY: Give 3 specific, actionable recovery tips for today (hydration, nutrition, movement, sleep). Number them 1-3.
+
+ADJUSTED PLAN: If they have a workout today, suggest a realistic modified version (lighter intensity, shorter duration, specific adjustments). If no workout, suggest one gentle recovery activity. Be specific and practical.`;
+
+  try {
+    console.log("[ai.service] analyzeHabits: calling Gemini...");
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    console.log("[ai.service] analyzeHabits: success");
+    return text;
+  } catch (err) {
+    console.error("[ai.service] analyzeHabits error:", err.message);
+    throw new Error("AI service temporarily unavailable. Please try again.");
+  }
+}
+
 module.exports = {
   generateWeeklyPlan,
   generateWeeklyReview,
   suggestExerciseAlternatives,
   suggestMealAlternatives,
   categorizeGroceries,
+  analyzeHabits,
 };

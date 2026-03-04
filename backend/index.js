@@ -15,6 +15,7 @@ const reviewsRouter = require("./src/routes/reviews");
 const settingsRouter = require("./src/routes/settings");
 const mealsRouter = require("./src/routes/meals");
 const groceryRouter = require("./src/routes/grocery");
+const habitsRouter = require("./src/routes/habits");
 const errorHandler = require("./src/middleware/errorHandler");
 
 const app = express();
@@ -46,6 +47,7 @@ app.use("/api/reviews", reviewsRouter);
 app.use("/api/user", settingsRouter);
 app.use("/api/meals", mealsRouter);
 app.use("/api/grocery", groceryRouter);
+app.use("/api/habits", habitsRouter);
 
 // Global error handler (must be last)
 app.use(errorHandler);
