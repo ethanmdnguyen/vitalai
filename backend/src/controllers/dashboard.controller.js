@@ -5,6 +5,15 @@
 const pool = require("../../db/pool");
 const { getProfileByUserId } = require("../models/profile.model");
 
+// Day-of-week index → plan key
+const DAYS_OF_WEEK = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"];
+
+function parseJsonField(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
 async function getDashboardData(req, res) {
   const userId = req.user.id;
 
@@ -15,6 +24,7 @@ async function getDashboardData(req, res) {
     { rows: weightRows },
     { rows: planRows },
     { rows: streakRows },
+    { rows: todayLogRows },
     profile,
   ] = await Promise.all([
 
@@ -27,9 +37,10 @@ async function getDashboardData(req, res) {
       [userId]
     ),
 
-    // Past 7 days — used for weekly stats and calorie/workout charts.
+    // Past 7 days — extended fields for activity and sleep stats.
     pool.query(
-      `SELECT log_date::text, calories, workout_completed
+      `SELECT log_date::text, calories, workout_completed,
+              sleep_hours, steps, distance_km, floors_climbed
        FROM daily_logs
        WHERE user_id = $1 AND log_date >= CURRENT_DATE - 6
        ORDER BY log_date DESC`,
@@ -44,9 +55,9 @@ async function getDashboardData(req, res) {
       [userId]
     ),
 
-    // Most recent plan — needed for calorie target reference line.
+    // Most recent plan — workout_plan for today's exercises, meal_plan for meals.
     pool.query(
-      `SELECT meal_plan FROM plans WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      `SELECT workout_plan, meal_plan FROM plans WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
       [userId]
     ),
 
@@ -61,6 +72,15 @@ async function getDashboardData(req, res) {
          WHERE dl.user_id = $1
        )
        SELECT COUNT(*) AS streak FROM streak_cte`,
+      [userId]
+    ),
+
+    // Today's log — steps, distance, sleep, workout checklist state.
+    pool.query(
+      `SELECT steps, distance_km, floors_climbed, sleep_hours,
+              workout_log, meals_log, calories, workout_completed
+       FROM daily_logs
+       WHERE user_id = $1 AND log_date = CURRENT_DATE`,
       [userId]
     ),
 
@@ -87,13 +107,78 @@ async function getDashboardData(req, res) {
   const streak = parseInt(streakRows[0]?.streak ?? 0, 10);
   const weeklyPlanTotal = profile?.workout_days_per_week ?? 0;
 
-  const rawMealPlan = planRows[0]?.meal_plan;
-  const mealPlan = rawMealPlan
-    ? typeof rawMealPlan === "string"
-      ? JSON.parse(rawMealPlan)
-      : rawMealPlan
-    : null;
+  // ── Today's activity ────────────────────────────────────────────────────────
+
+  const todayLog = todayLogRows[0] || null;
+  const stepsToday   = todayLog?.steps       != null ? parseInt(todayLog.steps, 10)           : null;
+  const distanceToday = todayLog?.distance_km != null ? parseFloat(todayLog.distance_km)       : null;
+
+  // ── Sleep average — past 7 days ─────────────────────────────────────────────
+
+  const daysWithSleep = last7Logs.filter((l) => l.sleep_hours != null);
+  const sleepAvg =
+    daysWithSleep.length > 0
+      ? parseFloat(
+          (daysWithSleep.reduce((sum, l) => sum + Number(l.sleep_hours), 0) /
+            daysWithSleep.length).toFixed(1)
+        )
+      : null;
+
+  // ── Average calories burned — past 7 days ──────────────────────────────────
+  // Sources: workout (MET ≈ 5 for 1h mixed training), steps, floors.
+  // Weight used for scaling; defaults to 70 kg if unknown.
+
+  const weightForCalc = currentWeight ?? (profile?.weight_kg ? parseFloat(profile.weight_kg) : 70);
+  const activeDaysForBurn = last7Logs.filter(
+    (l) => l.workout_completed || l.steps != null || l.floors_climbed != null
+  );
+  let avgCaloriesBurned = null;
+  if (activeDaysForBurn.length > 0) {
+    const totalBurned = activeDaysForBurn.reduce((sum, l) => {
+      let dayCal = 0;
+      // Workout: rough 5 MET × 1 h × weight_kg / 60 × 60 min ≈ 5 × weight / 60 kcal/min × 60 min
+      if (l.workout_completed) dayCal += Math.round(5 * weightForCalc * 1); // 5 MET × kg × hours
+      if (l.steps)          dayCal += Number(l.steps) * 0.04 * (weightForCalc / 70);
+      if (l.floors_climbed) dayCal += Number(l.floors_climbed) * 0.15 * (weightForCalc / 70);
+      return sum + dayCal;
+    }, 0);
+    avgCaloriesBurned = Math.round(totalBurned / activeDaysForBurn.length);
+  }
+
+  // ── Steps goal ──────────────────────────────────────────────────────────────
+
+  const stepsGoal = profile?.steps_goal ?? 10000;
+
+  // ── Plans ───────────────────────────────────────────────────────────────────
+
+  const rawMealPlan    = planRows[0]?.meal_plan;
+  const rawWorkoutPlan = planRows[0]?.workout_plan;
+  const mealPlan    = parseJsonField(rawMealPlan);
+  const workoutPlan = parseJsonField(rawWorkoutPlan);
   const calorieTarget = mealPlan?.dailyCalorieTarget ?? null;
+
+  // Today's workout (null = rest day)
+  const todayDayName = DAYS_OF_WEEK[new Date().getDay()];
+  const todayWorkout = workoutPlan?.[todayDayName] ?? null;
+
+  // Today's planned meals
+  const todayMeals = mealPlan
+    ? {
+        breakfast: mealPlan.breakfast ?? null,
+        lunch:     mealPlan.lunch     ?? null,
+        dinner:    mealPlan.dinner    ?? null,
+        snack:     mealPlan.snack     ?? null,
+        dailyCalorieTarget: mealPlan.dailyCalorieTarget ?? null,
+      }
+    : null;
+
+  // Workout checklist state — JSON array of checked exercise names
+  const todayWorkoutLog = (() => {
+    const raw = todayLog?.workout_log;
+    if (!raw) return [];
+    try { const p = JSON.parse(raw); return Array.isArray(p) ? p : []; }
+    catch { return []; }
+  })();
 
   // ── Histories in ascending order for charts ─────────────────────────────────
 
@@ -112,6 +197,7 @@ async function getDashboardData(req, res) {
     .reverse();
 
   return res.status(200).json({
+    // Existing fields (unchanged)
     workoutsThisWeek,
     avgCaloriesThisWeek,
     currentWeight,
@@ -121,6 +207,15 @@ async function getDashboardData(req, res) {
     calorieHistory,
     workoutHistory,
     weeklyPlanTotal,
+    // New Phase 4 fields
+    stepsToday,
+    distanceToday,
+    sleepAvg,
+    avgCaloriesBurned,
+    stepsGoal,
+    todayWorkout,
+    todayMeals,
+    todayWorkoutLog,
   });
 }
 

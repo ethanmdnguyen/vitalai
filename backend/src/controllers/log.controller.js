@@ -1,6 +1,6 @@
 // Log controller — handles saving and retrieving daily health logs.
 
-const { saveLog, getLogByDate } = require("../models/log.model");
+const { saveLog, getLogByDate, patchTodayLog } = require("../models/log.model");
 
 function getTodayDate() {
   return new Date().toISOString().split("T")[0];
@@ -30,4 +30,15 @@ async function getTodayLog(req, res) {
   return res.status(200).json(log || {});
 }
 
-module.exports = { createOrUpdateLog, getTodayLog };
+// Partial update of today's log — only touches the provided fields.
+async function patchTodayLogHandler(req, res) {
+  const userId = req.user.id;
+  const today = getTodayDate();
+  const updated = await patchTodayLog(userId, today, req.body);
+  if (!updated) {
+    return res.status(404).json({ error: "No log found for today. Log something first." });
+  }
+  return res.status(200).json(updated);
+}
+
+module.exports = { createOrUpdateLog, getTodayLog, patchTodayLogHandler };

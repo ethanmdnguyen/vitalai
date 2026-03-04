@@ -81,4 +81,27 @@ async function getLogsForWeek(userId, weekStart) {
   return result.rows;
 }
 
-module.exports = { saveLog, getLogByDate, getLogsForWeek };
+// Partial update of today's log — only sets the fields provided.
+// Whitelisted to prevent arbitrary column injection.
+const PATCH_ALLOWED = new Set([
+  "workout_log", "meals_log", "workout_completed",
+  "calories", "protein_g", "carbs_g", "fat_g",
+  "water_ml", "sleep_hours", "energy_level", "weight_kg",
+  "steps", "distance_km", "floors_climbed", "notes",
+]);
+
+async function patchTodayLog(userId, today, fields) {
+  const entries = Object.entries(fields).filter(([k]) => PATCH_ALLOWED.has(k));
+  if (entries.length === 0) return null;
+
+  const sets = entries.map(([k], i) => `${k} = $${i + 3}`).join(", ");
+  const values = [userId, today, ...entries.map(([, v]) => v)];
+
+  const result = await pool.query(
+    `UPDATE daily_logs SET ${sets} WHERE user_id = $1 AND log_date = $2 RETURNING *`,
+    values
+  );
+  return result.rows[0] || null;
+}
+
+module.exports = { saveLog, getLogByDate, getLogsForWeek, patchTodayLog };
