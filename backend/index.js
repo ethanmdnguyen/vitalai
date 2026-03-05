@@ -16,6 +16,7 @@ const settingsRouter = require("./src/routes/settings");
 const mealsRouter = require("./src/routes/meals");
 const groceryRouter = require("./src/routes/grocery");
 const habitsRouter = require("./src/routes/habits");
+const savedWorkoutsRouter = require("./src/routes/savedWorkouts");
 const errorHandler = require("./src/middleware/errorHandler");
 
 const app = express();
@@ -48,6 +49,7 @@ app.use("/api/user", settingsRouter);
 app.use("/api/meals", mealsRouter);
 app.use("/api/grocery", groceryRouter);
 app.use("/api/habits", habitsRouter);
+app.use("/api/saved-workouts", savedWorkoutsRouter);
 
 // Global error handler (must be last)
 app.use(errorHandler);

@@ -1,6 +1,6 @@
 // Plan controller — generates an AI plan for the user and retrieves the current one.
 
-const { generateWeeklyPlan, suggestExerciseAlternatives, suggestMealAlternatives } = require("../services/ai.service");
+const { generateWeeklyPlan, suggestExerciseAlternatives, suggestMealAlternatives, generateSingleDayWorkout } = require("../services/ai.service");
 const { savePlan, getCurrentPlan, updatePlanWorkout, updatePlanMeal } = require("../models/plan.model");
 const { getProfileByUserId } = require("../models/profile.model");
 
@@ -98,4 +98,28 @@ async function swapExerciseHandler(req, res) {
   return res.status(200).json({ alternatives });
 }
 
-module.exports = { generatePlan, getPlan, patchPlan, swapExerciseHandler, swapMealHandler };
+async function regenerateDayHandler(req, res) {
+  const userId = req.user.id;
+  const { day, feedback } = req.body;
+
+  if (!day) return res.status(400).json({ error: "day is required." });
+
+  console.log("[plan.controller] regenerateDayHandler: userId =", userId, "day =", day);
+
+  const profile = await getProfileByUserId(userId);
+  if (!profile) return res.status(400).json({ error: "Complete your profile first" });
+
+  const currentPlan = await getCurrentPlan(userId);
+  if (!currentPlan) return res.status(404).json({ error: "No plan found." });
+
+  const dayPlan = await generateSingleDayWorkout(
+    profile, day, currentPlan.workout_plan, feedback || null
+  );
+  const newWorkoutPlan = { ...currentPlan.workout_plan, [day]: dayPlan };
+  const updated = await updatePlanWorkout(userId, newWorkoutPlan);
+
+  console.log("[plan.controller] regenerateDayHandler: success for", day);
+  return res.status(200).json(updated);
+}
+
+module.exports = { generatePlan, getPlan, patchPlan, swapExerciseHandler, swapMealHandler, regenerateDayHandler };

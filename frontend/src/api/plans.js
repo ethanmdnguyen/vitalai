@@ -31,3 +31,8 @@ export async function patchMealPlan(mealPlan) {
   const response = await apiClient.patch("/plans/current", { mealPlan });
   return response.data;
 }
+
+export async function regenerateDay(day, feedback) {
+  const response = await apiClient.post("/plans/regenerate-day", { day, feedback: feedback || null });
+  return response.data;
+}

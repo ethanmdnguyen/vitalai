@@ -219,6 +219,46 @@ Return ONLY a valid JSON array with exactly 3 objects. No markdown, no extra tex
   }
 }
 
+async function generateSingleDayWorkout(profile, day, existingPlan, feedback) {
+  const capDay = day.charAt(0).toUpperCase() + day.slice(1);
+  const otherDays = Object.entries(existingPlan || {})
+    .filter(([d, dp]) => dp && d !== day)
+    .map(([d, dp]) => `${d.charAt(0).toUpperCase() + d.slice(1)}: ${dp.focus}`)
+    .join(", ");
+
+  let prompt = `You are an expert personal trainer. Regenerate just the ${capDay} workout for this user.
+
+User profile:
+- Age: ${profile.age}, Weight: ${profile.weight_kg}kg, Height: ${profile.height_cm}cm
+- Fitness level: ${profile.fitness_level || "Not specified"}
+- Goal: ${profile.primary_goal || profile.goal || "General fitness"}
+- Injuries: ${profile.injuries || "None"}
+- Preferred workout types: ${profile.workout_preferences || "None"}
+
+Other workout days this week: ${otherDays || "None set"}
+
+Return ONLY a valid JSON object with NO extra text, markdown, or backticks:
+{
+  "focus": "string",
+  "exercises": [{"name": "string", "sets": 3, "reps": "string", "notes": "string", "primary_muscles": ["string"], "secondary_muscles": ["string"]}],
+  "duration_minutes": 0
+}`;
+
+  if (feedback) prompt += `\n\nUser feedback: ${feedback}`;
+
+  try {
+    console.log("[ai.service] generateSingleDayWorkout: calling Gemini for", day);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await model.generateContent(prompt);
+    const plan = JSON.parse(extractJson(result.response.text()));
+    console.log("[ai.service] generateSingleDayWorkout: success");
+    return plan;
+  } catch (err) {
+    console.error("[ai.service] generateSingleDayWorkout error:", err.message);
+    throw new Error("AI service temporarily unavailable. Please try again.");
+  }
+}
+
 async function categorizeGroceries(ingredients) {
   const ingredientList = ingredients
     .map((i) => `- ${i.ingredient} (from ${i.meal_name}, ${i.meal_type})`)
@@ -320,4 +360,5 @@ module.exports = {
   suggestMealAlternatives,
   categorizeGroceries,
   analyzeHabits,
+  generateSingleDayWorkout,
 };
