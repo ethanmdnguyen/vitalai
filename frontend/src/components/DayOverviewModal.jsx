@@ -356,6 +356,12 @@ export default function DayOverviewModal({ day, dayPlan, profile, onClose, onUpd
   const [showRegenModal, setShowRegenModal] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
 
+  // Lock page scroll while modal is open.
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
   const unit       = profile?.unit_system || profile?.unit_preference || "metric";
   const weightKg   = profile?.weight_kg;
   const broadGroups = getBroadGroupsForExercises(localExercises);
