@@ -80,9 +80,16 @@ Return ONLY a valid JSON object with NO extra text, markdown, or backticks. Use 
     "dinner": { "name": "string", "ingredients": ["string"], "calories": 0 },
     "snack": { "name": "string", "ingredients": ["string"], "calories": 0 }
   },
-  "notes": "string"
+  "notes": "string",
+  "nutritionNotes": "string"
 }
-Set non-workout days to null. Distribute workout days based on workout_days_per_week.`;
+Set non-workout days to null. Distribute workout days based on workout_days_per_week.
+
+For the "nutritionNotes" field, write 3-4 short paragraphs in plain English explaining:
+1. Why the daily calorie target you chose makes sense for this person's goal and body stats.
+2. The reasoning behind your macro split — why that protein/carbs/fat ratio serves their goal.
+3. One practical tip for consistently hitting these targets given their diet type and any dietary notes.
+Use markdown formatting: **bold** key terms and use bullet points where helpful.`;
 
   // Append user feedback on previous plan if provided.
   if (feedback) {
@@ -197,7 +204,11 @@ async function suggestMealAlternatives({ mealType, dietType, calorieTarget, rest
   const calNote = calorieTarget ? ` Target calories: around ${calorieTarget} kcal.` : "";
   const restrictNote = restrictions?.length ? ` Dietary restrictions: ${restrictions.join(", ")}.` : "";
 
-  const prompt = `You are an expert nutritionist. Suggest 3 distinct meal alternatives ${focus}.${calNote}${restrictNote}
+  const snackNote = mealType === "snack" && !customRequest
+    ? " This must be a SNACK — keep it between 100-350 calories, simple ingredients, no cooking required. Think: fruit, nuts, yogurt, protein bar, veggies with hummus."
+    : "";
+
+  const prompt = `You are an expert nutritionist. Suggest 3 distinct meal alternatives ${focus}.${calNote}${restrictNote}${snackNote}
 
 Return ONLY a valid JSON array with exactly 3 objects. No markdown, no extra text, no backticks:
 [

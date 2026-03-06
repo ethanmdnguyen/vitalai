@@ -68,6 +68,7 @@ let authToken;
 let userId;
 
 beforeAll(async () => {
+  await pool.query("ALTER TABLE plans ADD COLUMN IF NOT EXISTS nutrition_notes TEXT");
   await pool.query("DELETE FROM users WHERE email = $1", [testUser.email]);
   const res = await request(app).post("/api/auth/register").send(testUser);
   authToken = res.body.token;

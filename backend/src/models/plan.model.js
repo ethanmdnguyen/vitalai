@@ -3,12 +3,12 @@
 
 const pool = require("../../db/pool");
 
-async function savePlan(userId, weekStart, workoutPlan, mealPlan, notes) {
+async function savePlan(userId, weekStart, workoutPlan, mealPlan, notes, nutritionNotes) {
   const result = await pool.query(
-    `INSERT INTO plans (user_id, week_start, workout_plan, meal_plan, notes)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO plans (user_id, week_start, workout_plan, meal_plan, notes, nutrition_notes)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [userId, weekStart, JSON.stringify(workoutPlan), JSON.stringify(mealPlan), notes || null]
+    [userId, weekStart, JSON.stringify(workoutPlan), JSON.stringify(mealPlan), notes || null, nutritionNotes || null]
   );
 
   const row = result.rows[0];

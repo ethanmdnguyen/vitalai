@@ -34,7 +34,8 @@ async function generatePlan(req, res) {
     weekStart,
     aiPlan.workoutPlan,
     aiPlan.mealPlan,
-    aiPlan.notes
+    aiPlan.notes,
+    aiPlan.nutritionNotes
   );
 
   console.log("[plan.controller] generatePlan: plan saved successfully, id =", savedPlan.id);

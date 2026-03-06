@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS plans (
   workout_plan TEXT,
   meal_plan TEXT,
   notes TEXT,
+  nutrition_notes TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
 

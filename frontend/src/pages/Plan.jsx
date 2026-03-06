@@ -2,7 +2,7 @@
 // v3: simplified exercise cards, double-click detail modal, hover muscle highlights,
 //     per-exercise DnD reordering, editable day titles, regenerate-with-feedback modal.
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import {
@@ -1399,7 +1399,32 @@ export default function Plan() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  const notes = plan?.notes;
+  const notes          = plan?.notes;
+  const nutritionNotes = plan?.nutrition_notes;
+
+  // Recomputes whenever any meal slot changes (swap/add).
+  const mealPlanTotals = useMemo(() => {
+    if (!mealPlan) return null;
+    let calories = 0, protein = 0, carbs = 0, fat = 0, allHaveMacros = true;
+    for (const meal of MEALS) {
+      const m = mealPlan[meal];
+      if (!m) continue;
+      calories += Number(m.calories) || 0;
+      if (m.macros) {
+        protein += Number(m.macros.protein_g) || 0;
+        carbs   += Number(m.macros.carbs_g)   || 0;
+        fat     += Number(m.macros.fat_g)      || 0;
+      } else {
+        allHaveMacros = false;
+      }
+    }
+    return {
+      calories,
+      protein: allHaveMacros ? protein : (mealPlan.macros?.protein_g ?? null),
+      carbs:   allHaveMacros ? carbs   : (mealPlan.macros?.carbs_g   ?? null),
+      fat:     allHaveMacros ? fat     : (mealPlan.macros?.fat_g     ?? null),
+    };
+  }, [mealPlan]);
 
   return (
     <div>
@@ -1557,20 +1582,22 @@ export default function Plan() {
             <section>
               <h2 className="text-lg font-semibold text-gray-800 mb-4">Meal Plan</h2>
 
-              <div className="flex flex-wrap gap-2 mb-5">
-                <span className="bg-gray-900 text-white px-3 py-1 rounded-full text-sm font-medium">
-                  {mealPlan.dailyCalorieTarget} kcal / day
-                </span>
-                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
-                  Protein {mealPlan.macros?.protein_g}g
-                </span>
-                <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
-                  Carbs {mealPlan.macros?.carbs_g}g
-                </span>
-                <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-sm font-medium">
-                  Fat {mealPlan.macros?.fat_g}g
-                </span>
-              </div>
+              {/* Live totals — recalculates whenever a meal is swapped */}
+              {mealPlanTotals && (
+                <div className="bg-gray-900 text-white rounded-xl px-4 py-3 mb-5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium">
+                  <span>Total: <span className="text-yellow-300">{mealPlanTotals.calories.toLocaleString()} kcal</span></span>
+                  {mealPlanTotals.protein != null && (
+                    <span className="text-gray-300">🥩 {mealPlanTotals.protein}g protein</span>
+                  )}
+                  {mealPlanTotals.carbs != null && (
+                    <span className="text-gray-300">🍞 {mealPlanTotals.carbs}g carbs</span>
+                  )}
+                  {mealPlanTotals.fat != null && (
+                    <span className="text-gray-300">🧈 {mealPlanTotals.fat}g fat</span>
+                  )}
+                  <span className="text-gray-500 text-xs ml-auto">Target: {mealPlan.dailyCalorieTarget} kcal</span>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {MEALS.map((meal) => {
@@ -1635,6 +1662,16 @@ export default function Plan() {
               <h2 className="text-lg font-semibold text-gray-800 mb-4">Coaching Notes</h2>
               <div className="bg-blue-50 border-l-4 border-blue-600 rounded-r-xl p-5 text-gray-700 leading-relaxed [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_p]:mb-2 [&_h2]:font-bold [&_h2]:text-gray-900 [&_h2]:mb-1 [&_h3]:font-semibold [&_h3]:mb-1">
                 <ReactMarkdown>{notes}</ReactMarkdown>
+              </div>
+            </section>
+          )}
+
+          {/* ── Nutrition Notes ── */}
+          {nutritionNotes && (
+            <section>
+              <h2 className="text-lg font-semibold text-gray-800 mb-4">Nutrition Notes 📋</h2>
+              <div className="bg-green-50 border-l-4 border-green-600 rounded-r-xl p-5 text-gray-700 leading-relaxed [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:ml-4 [&_ol]:list-decimal [&_ol]:ml-4 [&_p]:mb-2 [&_h2]:font-bold [&_h2]:text-gray-900 [&_h2]:mb-1 [&_h3]:font-semibold [&_h3]:mb-1">
+                <ReactMarkdown>{nutritionNotes}</ReactMarkdown>
               </div>
             </section>
           )}

@@ -56,6 +56,9 @@ async function migrate() {
     await client.query("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS steps_goal INT DEFAULT 10000");
     await client.query("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS morning_checkin_enabled BOOLEAN DEFAULT TRUE");
 
+    // v3 migrations — plans new columns.
+    await client.query("ALTER TABLE plans ADD COLUMN IF NOT EXISTS nutrition_notes TEXT");
+
     // v3 migrations — daily_logs new columns.
     await client.query("ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS steps INT");
     await client.query("ALTER TABLE daily_logs ADD COLUMN IF NOT EXISTS distance_km DECIMAL(6,2)");
